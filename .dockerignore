@@ -1,0 +1,9 @@
+.git
+.gitignore
+Makefile
+README.md
+doc/
+**/__pycache__/
+**/*.pyc
+.venv/
+node_modules/
