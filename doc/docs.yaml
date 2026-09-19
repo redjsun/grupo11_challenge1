@@ -1,10 +1,8 @@
 # Índice dos documentos em Markdown do repositório.
 # Cada entrada aponta para um arquivo .md dentro da pasta doc/.
 
-docs: []
-# Exemplo:
-# docs:
-#   - id: visao-geral
-#     titulo: Visão geral do desafio
-#     arquivo: doc/visao-geral.md
-#     descricao: Contexto e objetivos do desafio de fake news.
+docs:
+  - id: arquitetura
+    titulo: Arquitetura do projeto
+    arquivo: doc/arquitetura.md
+    descricao: Organização em camadas + MVC no backend e no frontend.

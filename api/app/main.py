@@ -1,18 +1,20 @@
-"""API do projeto Cobrinha Fake News."""
+"""Ponto de entrada da API — apenas monta a aplicação e as rotas."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Fake News Snake API", version="0.1.0")
+from app.controllers import api_router
+from app.core.config import get_settings
+
+settings = get_settings()
+
+app = FastAPI(title=settings.app_name, version=settings.version)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+app.include_router(api_router)
