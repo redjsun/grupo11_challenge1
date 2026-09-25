@@ -16,7 +16,7 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """RN01: rotas da jornada exigem usuário autenticado via `Authorization: Bearer`."""
+    """Rotas da jornada exigem usuário autenticado via `Authorization: Bearer`."""
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não autenticado",
@@ -33,7 +33,7 @@ def get_current_user(
 
 
 def get_current_admin(user: User = Depends(get_current_user)) -> User:
-    """Restringe a curadoria de conteúdo ao responsável pelo produto (RN12)."""
+    """Restringe a curadoria de conteúdo ao responsável pelo produto."""
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito")
     return user

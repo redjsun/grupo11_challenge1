@@ -1,4 +1,4 @@
-"""Partida do jogador e respostas dadas nela (RF25–RF32, RF40, RF54)."""
+"""Partida do jogador e respostas dadas nela."""
 
 import enum
 from datetime import datetime
@@ -21,7 +21,7 @@ class Match(Entity):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     level_id: Mapped[int] = mapped_column(ForeignKey("levels.id"))
     score: Mapped[int] = mapped_column(Integer, default=0)
-    # RN02: duração máxima de 120 segundos.
+    # Duração máxima de 120 segundos.
     duration_seconds: Mapped[int] = mapped_column(Integer, default=120)
     status: Mapped[MatchStatus] = mapped_column(
         Enum(MatchStatus, native_enum=False, length=20, values_callable=enum_values),

@@ -1,4 +1,4 @@
-"""Categoria das questões: Saúde, Tecnologia, Conhecimentos Gerais (RF19)."""
+"""Categoria das questões: Saúde, Tecnologia, Conhecimentos Gerais."""
 
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column

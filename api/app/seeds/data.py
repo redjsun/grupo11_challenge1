@@ -6,7 +6,7 @@ CATEGORIES = [
     {"name": "Conhecimentos Gerais", "slug": "conhecimentos-gerais"},
 ]
 
-# RN08/RN09: níveis 1–3 em 7×7, níveis 4–6 em 6×6; a cobra acelera a cada nível (RN07).
+# Níveis 1–3 em 7×7, níveis 4–6 em 6×6; a cobra acelera a cada nível.
 LEVELS = [
     {"number": 1, "board_size": 7, "tick_ms": 400, "min_score_to_advance": 30},
     {"number": 2, "board_size": 7, "tick_ms": 350, "min_score_to_advance": 40},

@@ -1,4 +1,4 @@
-"""Hash de senhas e tokens de acesso (RNF06, RNF07)."""
+"""Hash de senhas e tokens de acesso."""
 
 from datetime import datetime, timedelta, timezone
 

@@ -1,4 +1,4 @@
-"""Questão de verdadeiro ou falso do banco de conteúdo (RF18–RF21, RF51–RF53)."""
+"""Questão de verdadeiro ou falso do banco de conteúdo."""
 
 import enum
 from datetime import datetime
@@ -11,7 +11,7 @@ from app.models.category import Category
 
 
 class QuestionStatus(str, enum.Enum):
-    """Só questões `validated` chegam ao jogador (RN12, RNF14)."""
+    """Só questões `validated` chegam ao jogador."""
 
     DRAFT = "draft"
     VALIDATED = "validated"
@@ -29,7 +29,7 @@ class Question(Entity):
     statement: Mapped[str] = mapped_column(Text)
     is_true: Mapped[bool] = mapped_column(Boolean)
     explanation: Mapped[str] = mapped_column(Text)
-    # RNF13: origem da informação usada na validação.
+    # Origem da informação usada na validação.
     source: Mapped[str] = mapped_column(String(500))
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
     status: Mapped[QuestionStatus] = mapped_column(

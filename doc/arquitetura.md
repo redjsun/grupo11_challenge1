@@ -46,3 +46,21 @@ src/
 Fluxo: `view → controller (hook) → service → API`.
 As views não chamam `fetch` diretamente; toda chamada HTTP passa pelo
 `services/httpClient.ts`.
+
+## Rotas da API
+
+| Módulo | Rotas | Acesso |
+|---|---|---|
+| health | `GET /health` | público |
+| auth | `POST /auth/register`, `POST /auth/login` | público |
+| users | `GET /users/me` | jogador |
+| levels | `GET /levels` | público |
+| matches | `POST /matches`, `GET /matches/{id}`, `GET /matches/{id}/next-question`, `POST /matches/{id}/answers`, `POST /matches/{id}/finish` | jogador |
+| progress | `GET /progress/me` | jogador |
+| admin | `GET/POST /admin/questions`, `PATCH /admin/questions/{id}/review`, `POST /admin/ai/generate`, `POST /admin/ai/classify` | administrador |
+
+A documentação interativa fica em `http://localhost:8000/docs`. Os services levantam
+exceções de `core/exceptions.py`, convertidas em respostas HTTP pelo handler de `main.py`.
+A IA fica atrás da interface `integrations/ai_client.py` (`AI_PROVIDER=fake` por padrão)
+e tudo o que ela gera entra como rascunho, publicado só depois da revisão em
+`/admin/questions/{id}/review`. Para criar um administrador: `make admin u=usuario p=senha`.

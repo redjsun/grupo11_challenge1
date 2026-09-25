@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24
 
+    # Provedor usado por integrations/ai_client.py; "fake" roda sem chamadas externas.
+    ai_provider: str = "fake"
+    ai_api_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

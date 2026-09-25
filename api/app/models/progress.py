@@ -1,4 +1,4 @@
-"""Progresso consolidado do jogador na jornada (RF41, RF55, HU42)."""
+"""Progresso consolidado do jogador na jornada."""
 
 from datetime import datetime
 
