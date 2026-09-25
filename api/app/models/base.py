@@ -17,9 +17,7 @@ class Entity(Base):
     __abstract__ = True
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 def enum_values(enum_cls: type[enum.Enum]) -> list[str]:

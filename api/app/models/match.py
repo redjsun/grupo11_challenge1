@@ -27,12 +27,8 @@ class Match(Entity):
         Enum(MatchStatus, native_enum=False, length=20, values_callable=enum_values),
         default=MatchStatus.IN_PROGRESS,
     )
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    ended_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     level: Mapped[Level] = relationship()
     answers: Mapped[list["MatchAnswer"]] = relationship(back_populates="match")

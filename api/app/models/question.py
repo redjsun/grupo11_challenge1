@@ -41,8 +41,6 @@ class Question(Entity):
         Enum(QuestionOrigin, native_enum=False, length=20, values_callable=enum_values),
         default=QuestionOrigin.HUMAN,
     )
-    validated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     category: Mapped[Category] = relationship()

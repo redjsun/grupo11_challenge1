@@ -64,3 +64,15 @@ exceções de `core/exceptions.py`, convertidas em respostas HTTP pelo handler d
 A IA fica atrás da interface `integrations/ai_client.py` (`AI_PROVIDER=fake` por padrão)
 e tudo o que ela gera entra como rascunho, publicado só depois da revisão em
 `/admin/questions/{id}/review`. Para criar um administrador: `make admin u=usuario p=senha`.
+
+## Qualidade e CI
+
+O GitHub Actions (`.github/workflows/ci.yml`) roda a cada push e em todo pull request
+para a `main`:
+
+- **API**: `ruff check`, `ruff format --check` e `pytest` com um PostgreSQL temporário;
+- **Web**: `npm run build` (checagem de tipos do TypeScript + build do Vite);
+- **Docker**: `docker compose build`, depois que os dois jobs anteriores passam.
+
+Localmente: `make lint`, `make format` e `make test` (usa o banco `fako_test`,
+separado do de desenvolvimento).
