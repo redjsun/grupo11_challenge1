@@ -12,9 +12,16 @@ app/
 ├── controllers/      # Controller — rotas HTTP, validação de entrada
 ├── services/         # regras de negócio, sem conhecer HTTP
 ├── repositories/     # acesso a dados
-├── models/           # Model — entidades de domínio
-└── schemas/          # DTOs de entrada e saída da API
+├── models/           # Model — entidades de domínio (SQLAlchemy)
+├── schemas/          # DTOs de entrada e saída da API
+└── seeds/            # dados iniciais (categorias, níveis, questões)
+migrations/           # migrations do Alembic, geradas a partir dos models
 ```
+
+Persistência: PostgreSQL (serviço `db` no compose), SQLAlchemy 2 e Alembic.
+`core/database.py` abre uma sessão por requisição (`get_db`), com commit ao
+final e rollback em caso de erro. Comandos: `make migrate`, `make makemigration m="..."`
+e `make seed`.
 
 Fluxo: `controller → service → repository → model`.
 Os `schemas` trafegam entre controller e service; os `models` não vazam para fora

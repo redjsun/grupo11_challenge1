@@ -1,9 +1,9 @@
 COMPOSE := docker compose
 
-.PHONY: help build up down restart logs ps shell-api shell-web clean
+.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed clean
 
 help: ## Lista os comandos disponíveis
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 build: ## Constrói as imagens do projeto
 	$(COMPOSE) build
@@ -27,6 +27,18 @@ shell-api: ## Abre um shell no container da API
 
 shell-web: ## Abre um shell no container do frontend
 	$(COMPOSE) exec web sh
+
+shell-db: ## Abre o psql no container do banco
+	$(COMPOSE) exec db psql -U fako -d fako
+
+migrate: ## Aplica as migrations pendentes no banco
+	$(COMPOSE) exec api alembic upgrade head
+
+makemigration: ## Gera uma migration a partir dos models (uso: make makemigration m="descricao")
+	$(COMPOSE) exec api alembic revision --autogenerate -m "$(m)"
+
+seed: ## Popula o banco com categorias, níveis e questões iniciais
+	$(COMPOSE) exec api python -m app.seeds.run
 
 clean: ## Remove containers, volumes e imagens do projeto
 	$(COMPOSE) down -v --rmi local
