@@ -1,4 +1,7 @@
-"""Configurações da aplicação (camada de infraestrutura)."""
+"""Configurações da aplicação (camada de infraestrutura).
+
+Os valores podem ser sobrescritos por variáveis de ambiente (ver `.env.example`).
+"""
 
 from functools import lru_cache
 
@@ -10,6 +13,10 @@ class Settings(BaseSettings):
     version: str = "0.1.0"
     cors_origins: list[str] = ["*"]
     database_url: str = "postgresql+psycopg://fako:fako@localhost:5432/fako"
+
+    jwt_secret: str = "troque-este-segredo-em-producao"
+    jwt_algorithm: str = "HS256"
+    jwt_expires_minutes: int = 60 * 24
 
 
 @lru_cache
