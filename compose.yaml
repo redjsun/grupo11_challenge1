@@ -48,5 +48,16 @@ services:
     depends_on:
       - api
 
+  eda:
+    build: ./notebooks
+    container_name: fakenews-eda
+    profiles: ["eda"]
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/work/notebooks
+      - ./scripts:/work/scripts
+      - ./data:/work/data
+
 volumes:
   db_data:

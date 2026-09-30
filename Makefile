@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format clean
+.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados eda clean
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -54,6 +54,13 @@ lint: ## Verifica lint e formatação da API
 
 format: ## Formata o código da API
 	$(COMPOSE) run --rm --no-deps -v ./api:/app api sh -c "pip install -q -r requirements-dev.txt && ruff format . && ruff check --fix ."
+
+dados: ## Baixa as bases para data/raw/ e gera data/processed/dataset.jsonl
+	bash scripts/baixar_dados.sh
+	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_dados.py
+
+eda: ## Sobe o Jupyter Lab da EDA em http://localhost:8888
+	$(COMPOSE) --profile eda up -d eda
 
 clean: ## Remove containers, volumes e imagens do projeto
 	$(COMPOSE) down -v --rmi local

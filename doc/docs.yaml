@@ -6,3 +6,7 @@ docs:
     titulo: Arquitetura do projeto
     arquivo: doc/arquitetura.md
     descricao: Organização em camadas + MVC no backend e no frontend.
+  - id: eda
+    titulo: Análise exploratória dos dados
+    arquivo: doc/eda.md
+    descricao: Qualidade, vieses e recomendações sobre as bases Fake.br e Fakepedia.
