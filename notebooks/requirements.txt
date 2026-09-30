@@ -3,3 +3,5 @@ numpy>=1.26
 matplotlib>=3.8
 seaborn>=0.13
 jupyter>=1.0
+requests>=2.31
+beautifulsoup4>=4.12

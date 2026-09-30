@@ -3,10 +3,9 @@
 Uso: python scripts/preparar_dados.py   (só biblioteca padrão)
 
 Cada linha do JSONL é uma notícia com os campos:
-    id, base, rotulo, titulo, texto, categoria, data, autor, url, par_id, metricas
+    id, base, rotulo, titulo, texto, categoria, data, autor, url, par_id, metricas, split
 """
 
-import csv
 import json
 import re
 import sys
@@ -80,31 +79,42 @@ def ler_fakebr():
                 "url": url,
                 "par_id": int(arq.stem),
                 "metricas": metricas,
+                "split": "treino",
             }
 
 
-def ler_fakepedia():
-    vistos = set()
-    with open(RAW / "fakepedia-corpus-v1.csv", encoding="utf-8", newline="") as f:
-        for i, linha in enumerate(csv.DictReader(f, delimiter=";")):
-            url = linha["url_review"].strip()
-            if url in vistos:  # o CSV repete cerca de 40% das linhas
-                continue
-            vistos.add(url)
-            categoria = re.search(r"boatos\.org/([^/]+)/", url)
-            yield {
-                "id": f"fakepedia-{i}",
-                "base": "fakepedia",
-                "rotulo": linha["type"],
-                "titulo": linha["title"].strip(),
-                "texto": linha["message"].strip() or None,
-                "categoria": categoria[1] if categoria else None,
-                "data": None,
-                "autor": None,
-                "url": url,
-                "par_id": None,
-                "metricas": None,
-            }
+def ler_boatos():
+    """Checagens coletadas por scripts/coletar_boatos.py.
+
+    As URLs vindas do FakeRecogna (2019–2021) vão para treino; as dos sitemaps
+    (2024 em diante) formam o teste temporal.
+    """
+    arquivo = RAW / "boatos" / "boatos.jsonl"
+    if not arquivo.exists():
+        print("data/raw/boatos/boatos.jsonl não encontrado; rode scripts/coletar_boatos.py")
+        return
+    for linha in arquivo.read_text(encoding="utf-8").splitlines():
+        r = json.loads(linha)
+        # No layout antigo, a alegação "Boato – ..." já é a mensagem inteira.
+        texto = r.get("texto_boato") or r.get("alegacao")
+        if r.get("status") != 200 or not texto:
+            continue
+        if any(secao in r["url"] for secao in ("/english/", "/espanol/", "/lista/")):
+            continue
+        yield {
+            "id": "boatos-" + r["url"].rsplit("/", 1)[-1].removesuffix(".html"),
+            "base": "boatos",
+            "rotulo": "fake",
+            "titulo": r.get("alegacao"),
+            "texto": texto,
+            "categoria": r.get("categoria"),
+            "data": r.get("data"),
+            "autor": None,
+            "url": r["url"],
+            "par_id": None,
+            "metricas": None,
+            "split": "treino" if r["origem"] == "fakerecogna" else "teste",
+        }
 
 
 def main():
@@ -113,13 +123,13 @@ def main():
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     contagem = {}
     with open(SAIDA, "w", encoding="utf-8", newline="\n") as out:
-        for leitor in (ler_fakebr, ler_fakepedia):
+        for leitor in (ler_fakebr, ler_boatos):
             for registro in leitor():
                 out.write(json.dumps(registro, ensure_ascii=False) + "\n")
-                chave = (registro["base"], registro["rotulo"])
+                chave = (registro["base"], registro["rotulo"], registro["split"])
                 contagem[chave] = contagem.get(chave, 0) + 1
-    for (base, rotulo), n in sorted(contagem.items()):
-        print(f"{base:10} {rotulo:5} {n:6}")
+    for (base, rotulo, split), n in sorted(contagem.items()):
+        print(f"{base:8} {rotulo:5} {split:7} {n:6}")
     print(f"Gerado {SAIDA.relative_to(RAIZ)}")
 
 

@@ -11,10 +11,11 @@ mkdir -p "$RAW"
 FAKEBR_REPO="https://github.com/roneysco/Fake.br-Corpus.git"
 FAKEBR_COMMIT="780f5516c4ae070761632d98ac3368f3ded09d35"
 
-# Fakepedia Corpus — boatos checados pelo Boatos.org.
-FAKEPEDIA_COMMIT="f9da77eeebcf5238523128902423425544814546"
-FAKEPEDIA_URL="https://raw.githubusercontent.com/andersoncordeiro/Fakepedia-Corpus/$FAKEPEDIA_COMMIT/dataset/fakepedia-corpus-v1.csv"
-FAKEPEDIA_SHA256="8f1978864b96bea6d925c8af8904ecb6e87be9105018bfa769d08c3c8bf59d82"
+# FakeRecogna (Recogna/UNESP) — 5.951 checagens de 6 agências e 5.951 notícias reais.
+# O texto vem lematizado; usamos URL e rótulo e recoletamos o texto original.
+FAKERECOGNA_COMMIT="143842ba71e824a028572a89c9a522cbca40726e"
+FAKERECOGNA_URL="https://huggingface.co/datasets/recogna-nlp/FakeRecogna/resolve/$FAKERECOGNA_COMMIT/FakeRecogna.csv"
+FAKERECOGNA_SHA256="282110d0390a6dff37fedf43a22b3e61b97e30381bf96dacaa668ed45d3c4407"
 
 if [ -d "$RAW/Fake.br-Corpus/full_texts" ]; then
   echo "Fake.br-Corpus já existe em data/raw/, pulando."
@@ -24,15 +25,15 @@ else
   git -C "$RAW/Fake.br-Corpus" checkout --quiet "$FAKEBR_COMMIT"
 fi
 
-CSV="$RAW/fakepedia-corpus-v1.csv"
+CSV="$RAW/FakeRecogna.csv"
 if [ -f "$CSV" ]; then
-  echo "fakepedia-corpus-v1.csv já existe em data/raw/, pulando."
+  echo "FakeRecogna.csv já existe em data/raw/, pulando."
 else
-  echo "Baixando Fakepedia Corpus..."
-  curl -fsSL "$FAKEPEDIA_URL" -o "$CSV"
+  echo "Baixando FakeRecogna..."
+  curl -fsSL "$FAKERECOGNA_URL" -o "$CSV"
 fi
 
-echo "$FAKEPEDIA_SHA256  $CSV" | sha256sum -c --quiet - \
-  || { echo "Hash do fakepedia-corpus-v1.csv não confere." >&2; exit 1; }
+echo "$FAKERECOGNA_SHA256  $CSV" | sha256sum -c --quiet - \
+  || { echo "Hash do FakeRecogna.csv não confere." >&2; exit 1; }
 
 echo "Dados brutos prontos em data/raw/."
