@@ -3,9 +3,13 @@
 Uso: python scripts/preparar_dados.py   (só biblioteca padrão)
 
 Cada linha do JSONL é uma notícia com os campos:
-    id, base, rotulo, titulo, texto, categoria, data, autor, url, par_id, metricas, split
+    id, base, fonte, rotulo, titulo, texto, categoria, data, autor, url, par_id, metricas, split
+
+`base` diz de onde vem o rótulo (fakebr, fakerecogna, boatos_recente); `fonte` é o
+domínio de onde veio o texto, para medir o atalho de fonte.
 """
 
+import hashlib
 import json
 import re
 import sys
@@ -32,18 +36,22 @@ METRICAS_FAKEBR = [
 
 
 def parse_data(bruto: str) -> str | None:
-    """Converte os vários formatos de data do Fake.br para ISO (AAAA-MM-DD)."""
+    """Converte os vários formatos de data do Fake.br e do FakeRecogna para ISO.
+
+    Procura a data em qualquer posição, porque há prefixos e sufixos como
+    "Publicado em 04/05/21 10:52" e "27/03/2020 18h25Atualizada em ...".
+    """
     s = bruto.strip()
     try:
-        if m := re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", s):
+        if m := re.search(r"(?<!\d)(\d{4})[-/](\d{2})[-/](\d{2})(?!\d)", s):
             a, mes, d = map(int, m.groups())
-        elif m := re.match(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", s):
+        elif m := re.search(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{4}|\d{2})(?!\d)", s):
             d, mes, a = map(int, m.groups())
             if mes > 12:  # alguns registros vêm como M/D/AAAA
                 d, mes = mes, d
             if a < 100:
                 a += 2000
-        elif m := re.fullmatch(r"(\d{1,2}) de (\w+) de (\d{4})", s):
+        elif m := re.search(r"(\d{1,2}) de (\w+) de (\d{4})", s):
             d, a = int(m[1]), int(m[3])
             mes = MESES[m[2].lower()]
         else:
@@ -53,6 +61,11 @@ def parse_data(bruto: str) -> str | None:
         return date(a, mes, d).isoformat()
     except (ValueError, KeyError):
         return None
+
+
+def dominio(url: str) -> str | None:
+    achado = re.search(r"https?://(?:www\d?\.)?([^/]+)", url or "")
+    return achado[1] if achado else None
 
 
 def ler_fakebr():
@@ -70,6 +83,7 @@ def ler_fakebr():
             yield {
                 "id": f"fakebr-{rotulo}-{arq.stem}",
                 "base": "fakebr",
+                "fonte": dominio(url),
                 "rotulo": rotulo,
                 "titulo": None,
                 "texto": arq.read_text(encoding="utf-8-sig").strip(),
@@ -103,7 +117,8 @@ def ler_boatos():
             continue
         yield {
             "id": "boatos-" + r["url"].rsplit("/", 1)[-1].removesuffix(".html"),
-            "base": "boatos",
+            "base": "fakerecogna" if r["origem"] == "fakerecogna" else "boatos_recente",
+            "fonte": "boatos.org",
             "rotulo": "fake",
             "titulo": r.get("alegacao"),
             "texto": texto,
@@ -117,19 +132,46 @@ def ler_boatos():
         }
 
 
+def ler_noticias():
+    """Notícias verdadeiras do FakeRecogna, recoletadas por scripts/coletar_noticias.py."""
+    arquivo = RAW / "noticias" / "noticias.jsonl"
+    if not arquivo.exists():
+        print("data/raw/noticias/noticias.jsonl não encontrado; rode scripts/coletar_noticias.py")
+        return
+    for linha in arquivo.read_text(encoding="utf-8").splitlines():
+        r = json.loads(linha)
+        if r.get("status") != 200 or not r.get("texto"):
+            continue
+        yield {
+            "id": "noticia-" + hashlib.sha1(r["url"].encode()).hexdigest()[:12],
+            "base": "fakerecogna",
+            "fonte": r["dominio"],
+            "rotulo": "true",
+            "titulo": r.get("titulo"),
+            "texto": r["texto"],
+            "categoria": r.get("categoria"),
+            "data": r.get("data") or parse_data(r.get("data_fakerecogna") or ""),
+            "autor": None,
+            "url": r["url"],
+            "par_id": None,
+            "metricas": None,
+            "split": "treino",
+        }
+
+
 def main():
     if not RAW.exists():
         sys.exit("data/raw/ não encontrado. Rode antes: bash scripts/baixar_dados.sh")
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     contagem = {}
     with open(SAIDA, "w", encoding="utf-8", newline="\n") as out:
-        for leitor in (ler_fakebr, ler_boatos):
+        for leitor in (ler_fakebr, ler_boatos, ler_noticias):
             for registro in leitor():
                 out.write(json.dumps(registro, ensure_ascii=False) + "\n")
                 chave = (registro["base"], registro["rotulo"], registro["split"])
                 contagem[chave] = contagem.get(chave, 0) + 1
     for (base, rotulo, split), n in sorted(contagem.items()):
-        print(f"{base:8} {rotulo:5} {split:7} {n:6}")
+        print(f"{base:14} {rotulo:5} {split:7} {n:6}")
     print(f"Gerado {SAIDA.relative_to(RAIZ)}")
 
 

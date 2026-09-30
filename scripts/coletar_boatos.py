@@ -18,16 +18,15 @@ entram como texto, para o modelo não aprender o estilo do checador.
 
 import argparse
 import csv
-import hashlib
 import json
 import random
 import re
 import sys
-import time
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+from http_cache import HEADERS, baixar
 
 RAIZ = Path(__file__).resolve().parent.parent
 DESTINO = RAIZ / "data" / "raw" / "boatos"
@@ -36,7 +35,6 @@ SAIDA = DESTINO / "boatos.jsonl"
 FAKERECOGNA = RAIZ / "data" / "raw" / "FakeRecogna.csv"
 
 SITEMAP_ANO = "https://www.boatos.org/sitemap-posttype-post.{ano}.xml"
-HEADERS = {"User-Agent": "grupo11-challenge1/1.0 (pesquisa academica sobre desinformacao)"}
 # Traduções e listas de vários boatos não são uma checagem em português.
 SECOES_IGNORADAS = ("/english/", "/espanol/", "/lista/")
 PREFIXO_BOATO = re.compile(r"^\s*Boato\s*[–—-]\s*", re.I)
@@ -58,27 +56,6 @@ def urls_do_fakerecogna() -> list[str]:
             for linha in csv.DictReader(f)
             if "boatos.org" in linha["URL"] and linha["Classe"].startswith("0")
         ]
-
-
-def caminho_cache(url: str) -> Path:
-    return PAGINAS / f"{hashlib.sha1(url.encode()).hexdigest()}.html"
-
-
-def baixar(url: str, intervalo: float) -> tuple[str | None, int]:
-    """Devolve (html, status). Páginas já baixadas vêm do cache, sem requisição."""
-    cache = caminho_cache(url)
-    if cache.exists():
-        return cache.read_text(encoding="utf-8"), 200
-    time.sleep(intervalo)
-    try:
-        resposta = requests.get(url, headers=HEADERS, timeout=60)
-    except requests.RequestException:
-        return None, 0
-    if resposta.status_code != 200:
-        return None, resposta.status_code
-    resposta.encoding = "utf-8"
-    cache.write_text(resposta.text, encoding="utf-8")
-    return resposta.text, 200
 
 
 def limpar(texto: str) -> str:
@@ -150,7 +127,7 @@ def main():
             existentes[registro["url"]] = registro
 
     for i, url in enumerate(urls, 1):
-        html, status = baixar(url, args.intervalo)
+        html, status = baixar(url, PAGINAS, args.intervalo)
         registro = extrair(url, html) if html else {"url": url}
         registro.update(origem=origem_por_url[url], status=status)
         existentes[url] = registro

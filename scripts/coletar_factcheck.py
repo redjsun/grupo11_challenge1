@@ -25,18 +25,25 @@ RAIZ = Path(__file__).resolve().parent.parent
 SAIDA = RAIZ / "data" / "raw" / "factcheck" / "checagens.jsonl"
 ENDPOINT = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
-# Agências brasileiras de checagem. Confira os valores com --descobrir: a API filtra
-# pelo site do publicador como ela o registra.
+# Agências brasileiras de checagem, como a API registra o site do publicador (conferido
+# com --descobrir). O observador.pt fica de fora por ser português de Portugal.
 AGENCIAS = [
-    "lupa.uol.com.br",
     "aosfatos.org",
-    "g1.globo.com",
-    "projetocomprova.com.br",
     "estadao.com.br",
+    "noticias.uol.com.br",
+    "bol.uol.com.br",
     "checamos.afp.com",
+    "projetocomprova.com.br",
+    "www1.folha.uol.com.br",
+    "oglobo.globo.com",
+    "agenciatatu.com.br",
+    "eleicoes.apublica.org",
+    "nexojornal.com.br",
+    # não apareceram na descoberta; mantidos para confirmar pelo filtro de site
+    "lupa.uol.com.br",
+    "g1.globo.com",
     "boatos.org",
     "e-farsas.com",
-    "noticias.uol.com.br",
 ]
 
 # Buscas genéricas usadas só para descobrir quais publicadores existem em PT.
@@ -55,14 +62,32 @@ def chave_api() -> str:
     return chave
 
 
+class ErroAPI(Exception):
+    pass
+
+
+def requisitar(params: dict, tentativas: int = 6) -> dict:
+    """GET com nova tentativa e espera crescente para 429 e erros 5xx (instabilidade)."""
+    for tentativa in range(tentativas):
+        try:
+            resposta = requests.get(ENDPOINT, params=params, timeout=60)
+        except requests.RequestException as erro:
+            ultimo = str(erro)
+        else:
+            if resposta.status_code == 200:
+                return resposta.json()
+            ultimo = f"{resposta.status_code}: {resposta.text[:200]}"
+            if resposta.status_code != 429 and resposta.status_code < 500:
+                break  # chave inválida, parâmetro errado: repetir não adianta
+        time.sleep(2**tentativa)
+    raise ErroAPI(ultimo)
+
+
 def buscar(params: dict, chave: str, max_paginas: int):
     """Percorre as páginas de claims:search e devolve os claims brutos."""
     params = {**params, "languageCode": "pt", "pageSize": 100, "key": chave}
     for _ in range(max_paginas):
-        resposta = requests.get(ENDPOINT, params=params, timeout=60)
-        if resposta.status_code != 200:
-            sys.exit(f"Erro {resposta.status_code} da API: {resposta.text[:300]}")
-        corpo = resposta.json()
+        corpo = requisitar(params)
         yield from corpo.get("claims", [])
         if not corpo.get("nextPageToken"):
             return
@@ -100,6 +125,13 @@ def descobrir(chave: str):
         print(f"  {site}: {n}")
 
 
+def gravar(por_url: dict):
+    SAIDA.parent.mkdir(parents=True, exist_ok=True)
+    with open(SAIDA, "w", encoding="utf-8", newline="\n") as out:
+        for url in sorted(por_url):
+            out.write(json.dumps(por_url[url], ensure_ascii=False) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--descobrir", action="store_true", help="lista publicadores em PT")
@@ -118,18 +150,19 @@ def main():
             registro = json.loads(linha)
             por_url[registro["url"]] = registro
 
+    falhas = []
     for site in args.sites:
         antes = len(por_url)
-        for claim in buscar({"reviewPublisherSiteFilter": site}, chave, args.max_paginas):
-            for linha in achatar(claim):
-                if linha["url"]:
-                    por_url[linha["url"]] = linha
+        try:
+            for claim in buscar({"reviewPublisherSiteFilter": site}, chave, args.max_paginas):
+                for linha in achatar(claim):
+                    if linha["url"]:
+                        por_url[linha["url"]] = linha
+        except ErroAPI as erro:
+            falhas.append(site)
+            print(f"{site}: interrompido ({erro}); o que veio até aqui foi mantido")
         print(f"{site}: {len(por_url) - antes} checagens novas")
-
-    SAIDA.parent.mkdir(parents=True, exist_ok=True)
-    with open(SAIDA, "w", encoding="utf-8", newline="\n") as out:
-        for url in sorted(por_url):
-            out.write(json.dumps(por_url[url], ensure_ascii=False) + "\n")
+        gravar(por_url)  # a cada agência, para não perder progresso
 
     registros = list(por_url.values())
     print(f"\n{len(registros)} checagens em {SAIDA.relative_to(RAIZ)}")
@@ -138,6 +171,8 @@ def main():
         print(f"  {n:6}  {veredito}")
     anos = Counter((r["data_checagem"] or "????")[:4] for r in registros)
     print("Checagens por ano:", dict(sorted(anos.items())))
+    if falhas:
+        print(f"Agências incompletas (rode de novo com --sites): {' '.join(falhas)}")
 
 
 if __name__ == "__main__":
