@@ -55,9 +55,10 @@ lint: ## Verifica lint e formatação da API
 format: ## Formata o código da API
 	$(COMPOSE) run --rm --no-deps -v ./api:/app api sh -c "pip install -q -r requirements-dev.txt && ruff format . && ruff check --fix ."
 
-dados: ## Baixa as bases para data/raw/ e gera data/processed/dataset.jsonl
+dados: ## Baixa as bases para data/raw/ e gera data/processed/dataset.jsonl e claimpt.jsonl
 	bash scripts/baixar_dados.sh
 	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_dados.py
+	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_claimpt.py
 
 eda: ## Sobe o Jupyter Lab da EDA em http://localhost:8888
 	$(COMPOSE) --profile eda up -d eda

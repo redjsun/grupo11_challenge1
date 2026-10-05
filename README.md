@@ -8,30 +8,71 @@ As bases não ficam no Git: `data/` está no `.gitignore`. Para baixá-las e ger
 versão unificada:
 
 ```bash
-make dados    # data/raw/ (brutos) + data/processed/dataset.jsonl
-make eda      # Jupyter Lab com notebooks/eda.ipynb em http://localhost:8888
+bash scripts/baixar_dados.sh                     # Fake.br, FakeRecogna, FakeTrue.Br, FakenewsBR e ClaimPT
+python scripts/coletar_noticias.py               # texto das verdadeiras do FakeRecogna
+python scripts/coletar_boatos.py --fakerecogna   # texto das falsas do FakeRecogna
+python scripts/coletar_verdadeiras.py            # notícias verdadeiras dos portais (~1 h)
+python scripts/coletar_factcheck.py              # precisa de FACTCHECK_API_KEY no .env
+python scripts/preparar_dados.py                 # data/processed/dataset.jsonl
+python scripts/preparar_claimpt.py               # data/processed/claimpt.jsonl
+make eda                                         # Jupyter Lab em http://localhost:8888
 ```
 
-Sem `make`: `bash scripts/baixar_dados.sh`, `python scripts/coletar_boatos.py --fakerecogna --anos 2024 2025 2026`
-e `python scripts/preparar_dados.py`. A coleta usa `requests` e `beautifulsoup4`
-(`notebooks/requirements.txt`) e leva cerca de 2 horas na primeira vez, por causa do
-intervalo de 1 s entre requisições. Depois as páginas ficam em cache em `data/raw/boatos/`.
+Os coletores usam `requests` e `beautifulsoup4` (`notebooks/requirements.txt`), esperam
+1 s entre requisições ao mesmo site e guardam as páginas em cache em `data/raw/`, então
+rodar de novo só baixa o que falta. O preparo usa só a biblioteca padrão.
 
-| Base | Origem | Uso |
-|------|--------|-----|
-| Fake.br-Corpus | [roneysco/Fake.br-Corpus](https://github.com/roneysco/Fake.br-Corpus) (NILC/USP), commit `780f551` | treino: 3.600 notícias falsas pareadas com 3.600 verdadeiras (2016–2018) |
-| FakeRecogna | [recogna-nlp/FakeRecogna](https://huggingface.co/datasets/recogna-nlp/FakeRecogna) (UNESP), commit `143842b`, licença MIT | treino: URLs e rótulos de 11.902 notícias (2019–2021); o texto é recoletado porque vem lematizado |
-| Boatos.org | [boatos.org](https://www.boatos.org/), coletado por `scripts/coletar_boatos.py` | texto dos boatos: das URLs do FakeRecogna (treino) e das checagens de 2024 em diante (teste temporal) |
+| Base | Classe | Origem | O que entra |
+|------|--------|--------|-------------|
+| Fake.br-Corpus | fake e true | [roneysco/Fake.br-Corpus](https://github.com/roneysco/Fake.br-Corpus) (NILC/USP), commit `780f551` | 3.600 pares de 2016–2018 |
+| FakeRecogna | fake e true | [recogna-nlp/FakeRecogna](https://huggingface.co/datasets/recogna-nlp/FakeRecogna) (commit `143842b`, MIT) | só URL e rótulo; o texto é recoletado: as falsas do Boatos.org por `coletar_boatos.py --fakerecogna` (o boato que circulou, nunca o texto da checagem) e as verdadeiras por `coletar_noticias.py` |
+| FakeTrue.Br | fake e true | [jpchav98/FakeTrue.Br](https://github.com/jpchav98/FakeTrue.Br), commit `37cdd5f` | 1.791 pares Boatos.org × G1/Folha/UOL do mesmo assunto; texto em minúsculas na origem |
+| Google Fact Check Tools API | fake, enganoso e true | 10 agências brasileiras, por `scripts/coletar_factcheck.py` | alegações com veredito "falso", de meia-verdade ou "verdadeiro"; a principal fonte de enganosos |
+| FakenewsBR v6 | fake, enganoso e true | [thiago-cg/fakenewsbr-v4](https://github.com/thiago-cg/fakenewsbr-v4), commit `44a55e5`, variante pública | sub-bases de agência (enganosos, verdadeiros com veredito e uma amostra dos falsos) e as mensagens de WhatsApp e de COVID, com as duas classes (ver `FAKENEWSBR_INCLUIR` em `preparar_dados.py`) |
+| Verdadeiras (CSV próprio) | true | 9 portais de linhas editoriais variadas, por `scripts/coletar_verdadeiras.py` | matérias de 2018 em diante; completam os verdadeiros recentes |
+| ClaimPT | sem veracidade | [LIAAD/ClaimPT](https://github.com/LIAAD/ClaimPT) (INESC TEC), commit `317a170` | notícias da Lusa (português europeu) com afirmações, não-afirmações e quem disse. Fica fora do `dataset.jsonl`: vai para `claimpt.jsonl`, para avaliar a extração de afirmações. O Git traz uma amostra de 20 artigos; o completo (1.308) exige um Data Use Agreement ([doi:10.25747/JY10-E413](https://doi.org/10.25747/JY10-E413)) e, quando obtido, vai em `data/raw/ClaimPT-completo/`, com a mesma estrutura da amostra |
 
-Da página do Boatos.org, só guardamos o boato que circulou. O texto do checador fica
-de fora, para o modelo não aprender o estilo da checagem.
+**Critérios.** A veracidade tem três níveis: os vereditos "falso" (e equivalentes) viram
+`falso`, as meias-verdades ("enganoso", "fora de contexto", "distorcido"...) viram
+`enganoso` e os "verdadeiro" e "comprovado" viram `verdadeiro`. Sátira e vereditos
+ambíguos ficam de fora. Nas verdadeiras, só entram portais cujo `robots.txt` não bloqueia
+robôs de treino de IA.
 
-O Fake.br não declara licença; o uso aqui é acadêmico, com citação dos trabalhos:
+**Divisão e equilíbrio** (`split_produto`, ver `definir_split_produto` e `equilibrar` em
+`preparar_dados.py`). As bases pareadas (Fake.br, FakeRecogna, FakeTrue.Br) são sorteadas
+por par em 80/10/10; as checagens e os portais vão por data (treino de 2016 a 2023,
+validação em 2024, teste de 2025 em diante); as mensagens ficam no treino. Depois, as
+classes são equilibradas, e o que sobra vira `reserva`:
+
+| Split | Verdadeiro | Enganoso | Falso |
+|---|---:|---:|---:|
+| `treino` | 12.512 | 1.541 | 12.512 |
+| `validacao` | 1.446 | 964 | 1.446 |
+| `teste` | 1.638 | 1.092 | 1.638 |
+
+Cada registro tem um `origem_rotulo` (`agencia`, `curadoria`, `portal` ou `mensagem`) para
+pesar os exemplos no treino: portal e mensagem valem menos, porque o rótulo "verdadeiro"
+deles é suposição ou só quer dizer "não é desinformação".
+
+**Licenças.** O Fake.br e o FakeTrue.Br não declaram licença. FakeRecogna e a compilação da FakenewsBR
+são MIT, mas o conteúdo de terceiros na FakenewsBR segue os termos das fontes
+originais (ver o `SOURCES_AND_LICENSES.md` dela; a sub-base `FakeWhatsApp.BR_2018` é
+GPL-3.0). O ClaimPT é CC BY-NC-ND 4.0: só uso não comercial, e versões derivadas (como
+o `claimpt.jsonl`) não podem ser redistribuídas. Os textos dos checadores e dos portais têm direitos dos veículos. O uso aqui é
+acadêmico, os dados não são redistribuídos e os trabalhos são citados:
 
 - Monteiro R.A. et al. (2018). *Contributions to the Study of Fake News in Portuguese:
   New Corpus and Automatic Detection Results*. PROPOR 2018, LNCS 11122.
 - Garcia G.L., Afonso L.C.S., Papa J.P. (2022). *FakeRecogna: A New Brazilian Corpus for
   Fake News Detection*. PROPOR 2022, LNCS 13208.
+- FakenewsBR, de thiago-cg (ver `CITATION.cff` no repositório).
+- *FakeTrueBr: Um corpus brasileiro de notícias falsas*. XVIII Escola Regional de Banco de
+  Dados (ERBD 2023), [SBC OpenLib](https://sol.sbc.org.br/index.php/erbd/article/view/24352).
+- *ClaimPT: A Portuguese Dataset of Annotated Claims in News Articles* (LIAAD/INESC TEC),
+  [arXiv:2601.19490](https://arxiv.org/abs/2601.19490).
 
-Achados da análise exploratória, incluindo por que o Fakepedia foi descartado:
-[doc/eda.md](doc/eda.md).
+**Análises.** A EDA da base atual está em dois notebooks: `notebooks/eda_1_datasets.ipynb`
+explora cada dataset (linhas, classes, período, formato, fontes e uso no modelo) e
+`notebooks/eda_2_conjunto.ipynb` analisa todos juntos (equilíbrio por split, origem do
+rótulo, período, formato e teste de atalho). [doc/eda.md](doc/eda.md) registra a primeira
+análise, que levou ao descarte do Fakepedia.
