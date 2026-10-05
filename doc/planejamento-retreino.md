@@ -90,6 +90,6 @@ A imagem precisa ganhar o binário do supercronic no `Dockerfile`.
 
 ## Ordem
 
-1. Fechar a EDA oficial (`notebooks/eda_oficial.ipynb`).
+1. Fechar a EDA (`notebooks/eda_1_datasets.ipynb` e `notebooks/eda_2_conjunto.ipynb`).
 2. Treinar e avaliar o primeiro modelo (`ml/`), medindo a queda no teste temporal.
 3. Com essa medida, definir a frequência e implementar o agendador.

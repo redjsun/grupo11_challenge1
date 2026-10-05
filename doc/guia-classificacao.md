@@ -98,7 +98,7 @@ Check API segue a mesma regra de data das outras bases (seção 5): assim há 84
 no treino e 750 na validação. Com o corte anterior (treino até 2022, Fact Check API só no
 teste), eram 243 e 47. As alegações checadas como verdadeiras são poucas (cerca de 700); a
 classe verdadeira continua vindo, na maior parte, de títulos de portais, que são um gênero
-de texto diferente das alegações (atalho medido em `eda_oficial.ipynb`).
+de texto diferente das alegações (atalho medido em `eda_2_conjunto.ipynb`).
 
 **Rótulos fracos de tipo.** O `tipo_sugerido` pré-preenche a planilha de anotação e é
 sempre conferido por um anotador:
@@ -214,7 +214,7 @@ calibração e os limiares saem da validação de 2024.
 - recall de falsas com 5% de verdadeiros marcados como falsos;
 - calibração (ECE e diagrama de confiabilidade);
 - o teste de atalho: um modelo só com estilo e tamanho, sem conteúdo
-  (`eda_oficial.ipynb`, seção 7). Se ele já acerta muito, o problema está nos dados.
+  (`eda_2_conjunto.ipynb`, seção 7). Se ele já acerta muito, o problema está nos dados.
 
 Escolhas de modelo, hiperparâmetros e limiares usam só a validação. Os testes são olhados
 uma vez, no fim.

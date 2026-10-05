@@ -1,7 +1,9 @@
 # Análise exploratória dos dados
 
-Resumo dos achados de [`notebooks/eda.ipynb`](../notebooks/eda.ipynb), que tem os
-gráficos e as tabelas completas. Para reproduzir: `make dados && make eda`.
+Resumo da primeira análise, que comparou o Fake.br e o Fakepedia e levou ao descarte do
+Fakepedia. O notebook dela (`notebooks/eda.ipynb`) saiu do repositório porque o Fakepedia
+não é mais baixado; ele continua no histórico do Git. A EDA da base atual está em
+`notebooks/eda_1_datasets.ipynb` e `notebooks/eda_2_conjunto.ipynb`.
 
 ## As bases
 
