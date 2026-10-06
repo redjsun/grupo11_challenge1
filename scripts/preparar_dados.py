@@ -278,9 +278,9 @@ def ler_fakebr():
 def ler_boatos():
     """Checagens coletadas por scripts/coletar_boatos.py.
 
-    Só as URLs vindas do FakeRecogna (2019–2021), que formam a parte falsa do FakeRecogna
-    reconstruído. As dos sitemaps (2024 em diante) ficam de fora: falsos recentes já vêm da
-    Fact Check API, e o que falta para o equilíbrio são verdadeiros.
+    São as URLs do Boatos.org no FakeRecogna (2019–2021), que formam a parte falsa do
+    FakeRecogna reconstruído. Boatos mais recentes não são coletados: falsos recentes já vêm
+    da Fact Check API, e o que falta para o equilíbrio são verdadeiros.
     """
     arquivo = RAW / "boatos" / "boatos.jsonl"
     if not arquivo.exists():

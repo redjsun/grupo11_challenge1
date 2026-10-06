@@ -1,9 +1,11 @@
-"""Coleta checagens do Boatos.org e extrai o texto do boato que circulou.
+"""Coleta as checagens do Boatos.org do FakeRecogna e extrai o texto do boato que circulou.
 
 Uso:
-    python scripts/coletar_boatos.py --anos 2024 2025 2026      # teste temporal
-    python scripts/coletar_boatos.py --fakerecogna              # URLs do FakeRecogna
-    python scripts/coletar_boatos.py --anos 2026 --amostra 200  # amostra aleatória
+    python scripts/coletar_boatos.py                # todas as URLs do Boatos.org no FakeRecogna
+    python scripts/coletar_boatos.py --amostra 200  # amostra aleatória
+
+O FakeRecogna só traz a URL e o rótulo (o texto vem lematizado), então as falsas dele são
+baixadas de novo aqui.
 
 As páginas ficam em cache em data/raw/boatos/paginas/, então rodar de novo só baixa o
 que falta. A saída é data/raw/boatos/boatos.jsonl, com uma linha por URL.
@@ -24,9 +26,8 @@ import re
 import sys
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
-from http_cache import HEADERS, baixar
+from http_cache import baixar
 
 RAIZ = Path(__file__).resolve().parent.parent
 DESTINO = RAIZ / "data" / "raw" / "boatos"
@@ -34,17 +35,7 @@ PAGINAS = DESTINO / "paginas"
 SAIDA = DESTINO / "boatos.jsonl"
 FAKERECOGNA = RAIZ / "data" / "raw" / "FakeRecogna.csv"
 
-SITEMAP_ANO = "https://www.boatos.org/sitemap-posttype-post.{ano}.xml"
-# Traduções e listas de vários boatos não são uma checagem em português.
-SECOES_IGNORADAS = ("/english/", "/espanol/", "/lista/")
 PREFIXO_BOATO = re.compile(r"^\s*Boato\s*[–—-]\s*", re.I)
-
-
-def urls_do_sitemap(ano: int) -> list[str]:
-    resposta = requests.get(SITEMAP_ANO.format(ano=ano), headers=HEADERS, timeout=60)
-    resposta.raise_for_status()
-    urls = re.findall(r"<loc>([^<]+)</loc>", resposta.text)
-    return [u for u in urls if not any(secao in u for secao in SECOES_IGNORADAS)]
 
 
 def urls_do_fakerecogna() -> list[str]:
@@ -97,24 +88,12 @@ def extrair(url: str, html: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--anos", type=int, nargs="*", default=[], help="anos dos sitemaps")
-    parser.add_argument("--fakerecogna", action="store_true", help="URLs do Boatos.org no FakeRecogna")
     parser.add_argument("--amostra", type=int, help="coleta só N URLs sorteadas")
     parser.add_argument("--semente", type=int, default=42)
     parser.add_argument("--intervalo", type=float, default=1.0, help="segundos entre requisições")
     args = parser.parse_args()
-    if not args.anos and not args.fakerecogna:
-        parser.error("informe --anos e/ou --fakerecogna")
 
-    origem_por_url = {}
-    for ano in args.anos:
-        for url in urls_do_sitemap(ano):
-            origem_por_url.setdefault(url, f"sitemap-{ano}")
-    if args.fakerecogna:
-        for url in urls_do_fakerecogna():
-            origem_por_url.setdefault(url, "fakerecogna")
-
-    urls = sorted(origem_por_url)
+    urls = sorted(set(urls_do_fakerecogna()))
     if args.amostra:
         urls = random.Random(args.semente).sample(urls, min(args.amostra, len(urls)))
     print(f"{len(urls)} URLs a processar")
@@ -129,7 +108,7 @@ def main():
     for i, url in enumerate(urls, 1):
         html, status = baixar(url, PAGINAS, args.intervalo)
         registro = extrair(url, html) if html else {"url": url}
-        registro.update(origem=origem_por_url[url], status=status)
+        registro.update(origem="fakerecogna", status=status)
         existentes[url] = registro
         if i % 50 == 0:
             print(f"  {i}/{len(urls)}")

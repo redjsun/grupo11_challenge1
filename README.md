@@ -10,7 +10,7 @@ versão unificada:
 ```bash
 bash scripts/baixar_dados.sh                     # Fake.br, FakeRecogna, FakeTrue.Br, FakenewsBR e ClaimPT
 python scripts/coletar_noticias.py               # texto das verdadeiras do FakeRecogna
-python scripts/coletar_boatos.py --fakerecogna   # texto das falsas do FakeRecogna
+python scripts/coletar_boatos.py                 # texto das falsas do FakeRecogna
 python scripts/coletar_verdadeiras.py            # notícias verdadeiras dos portais (~1 h)
 python scripts/coletar_factcheck.py              # precisa de FACTCHECK_API_KEY no .env
 python scripts/preparar_dados.py                 # data/processed/dataset.jsonl
@@ -25,7 +25,7 @@ rodar de novo só baixa o que falta. O preparo usa só a biblioteca padrão.
 | Base | Classe | Origem | O que entra |
 |------|--------|--------|-------------|
 | Fake.br-Corpus | fake e true | [roneysco/Fake.br-Corpus](https://github.com/roneysco/Fake.br-Corpus) (NILC/USP), commit `780f551` | 3.600 pares de 2016–2018 |
-| FakeRecogna | fake e true | [recogna-nlp/FakeRecogna](https://huggingface.co/datasets/recogna-nlp/FakeRecogna) (commit `143842b`, MIT) | só URL e rótulo; o texto é recoletado: as falsas do Boatos.org por `coletar_boatos.py --fakerecogna` (o boato que circulou, nunca o texto da checagem) e as verdadeiras por `coletar_noticias.py` |
+| FakeRecogna | fake e true | [recogna-nlp/FakeRecogna](https://huggingface.co/datasets/recogna-nlp/FakeRecogna) (commit `143842b`, MIT) | só URL e rótulo; o texto é recoletado: as falsas do Boatos.org por `coletar_boatos.py` (o boato que circulou, nunca o texto da checagem) e as verdadeiras por `coletar_noticias.py` |
 | FakeTrue.Br | fake e true | [jpchav98/FakeTrue.Br](https://github.com/jpchav98/FakeTrue.Br), commit `37cdd5f` | 1.791 pares Boatos.org × G1/Folha/UOL do mesmo assunto; texto em minúsculas na origem |
 | Google Fact Check Tools API | fake, enganoso e true | 10 agências brasileiras, por `scripts/coletar_factcheck.py` | alegações com veredito "falso", de meia-verdade ou "verdadeiro"; a principal fonte de enganosos |
 | FakenewsBR v6 | fake, enganoso e true | [thiago-cg/fakenewsbr-v4](https://github.com/thiago-cg/fakenewsbr-v4), commit `44a55e5`, variante pública | sub-bases de agência (enganosos, verdadeiros com veredito e uma amostra dos falsos) e as mensagens de WhatsApp e de COVID, com as duas classes (ver `FAKENEWSBR_INCLUIR` em `preparar_dados.py`) |

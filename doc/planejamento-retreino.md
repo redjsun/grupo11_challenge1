@@ -84,7 +84,8 @@ A imagem precisa ganhar o binário do supercronic no `Dockerfile`.
    brusca indica *drift* ou que alguma fonte mudou de formato.
 4. **Coleta incremental.** `coletar_verdadeiras.py --de AAAA-MM` já limita o período.
    Falta o mesmo no `coletar_factcheck.py` (hoje ele percorre todas as páginas de cada
-   agência) e no `coletar_boatos.py` (sitemap só do ano corrente).
+   agência). O `coletar_boatos.py` só recoleta as falsas do FakeRecogna e não entra na
+   coleta contínua: falsos recentes vêm da Fact Check API.
 5. **Mesmo formato no treino e no uso.** Se o modelo for treinado com `texto_curto`
    (título ou alegação), a classificação diária também usa o título.
 
