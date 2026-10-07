@@ -87,8 +87,14 @@ def contribuicoes(texto: str, modelo: dict, n: int = 10) -> dict[str, list[tuple
         pesos = modelo[chave].coef_[0]
         valores = linha.data * pesos[linha.indices]
         ordem = np.argsort(-np.abs(valores))[:n]
-        resultado[nome] = [(str(nomes[linha.indices[i]]), float(valores[i])) for i in ordem]
+        resultado[nome] = [(legivel(nomes[linha.indices[i]]), float(valores[i])) for i in ordem]
     return resultado
+
+
+def legivel(variavel: str) -> str:
+    """ "palavras__lula disse" -> "lula disse"; "caracteres__ vac" -> "[ vac]" (trecho de palavra)."""
+    tipo, _, termo = variavel.partition("__")
+    return f"[{termo}]" if tipo == "caracteres" else termo
 
 
 def treinar_fronteiras(matriz, exemplos: list[Exemplo], c: float, max_iter: int) -> dict:

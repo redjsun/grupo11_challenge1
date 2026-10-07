@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados padronizar atalho contagens referencia avaliar test-ml shell-ml eda clean
+.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados padronizar atalho contagens referencia avaliar classificar test-ml shell-ml eda clean
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -80,6 +80,9 @@ referencia: ## Treina a referência TF-IDF ordinal (uso: make referencia [CONFIG
 	$(ML) python pesquisa/ml/treinar_referencia.py --config $(CONFIG)
 
 MODELO ?= models/2026-11/referencia
+
+classificar: ## Teste manual do modelo (uso: make classificar [ARGS='"uma frase"' | ARGS="--amostra 10 --erros" | ARGS=--exportar])
+	$(ML) python pesquisa/ml/classificar.py --modelo $(MODELO) $(ARGS)
 
 avaliar: ## Avalia modelo(s) na validação (uso: make avaliar [MODELO="models/2026-11/referencia models/2026-11/bert"] [ARGS=--teste])
 	$(ML) python pesquisa/ml/avaliar.py --modelo $(MODELO) $(ARGS)
