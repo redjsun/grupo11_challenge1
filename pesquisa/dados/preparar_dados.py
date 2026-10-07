@@ -26,7 +26,7 @@ Cada linha do JSONL é uma notícia com os campos:
   sorteadas por par em 80/10/10; as checagens e os portais vão por data (treino de 2016 a
   2023, validação em 2024, teste de 2025 em diante); as mensagens de WhatsApp e de COVID
   ficam no treino. Ficam `fora` os registros sem data, os anteriores a 2016 e as
-  quase-duplicatas, e viram `reserva` os que sobram no equilíbrio entre as classes (ver
+  quase-duplicatas, e viram `reserva` os portais e os que sobram no equilíbrio (ver
   definir_split_produto e equilibrar).
 
 Registros repetidos (mesma URL ou mesmo início de texto) entram uma vez só, na primeira
@@ -212,8 +212,13 @@ def definir_split_produto(registro: dict) -> str:
 
 
 # Peso de cada origem de rótulo no treino (doc da pipeline, 04): o rótulo de portal é
-# verdadeiro por suposição, e o "true" das mensagens quer dizer só "não é desinformação".
-ORIGEM_ROTULO_PESO = {"agencia": 1.0, "curadoria": 1.0, "portal": 0.7, "mensagem": 0.7}
+# verdadeiro por suposição (fica fora do dataset selecionado, ver equilibrar), e o "true"
+# das mensagens quer dizer só "não é desinformação". `equipe` (#5), `jogo` (revisões do
+# admin, #29) e `portal_verificado` (#6) entram com 1,0 até a validação dizer outra coisa.
+ORIGEM_ROTULO_PESO = {
+    "agencia": 1.0, "curadoria": 1.0, "portal": 0.7, "mensagem": 0.7,
+    "equipe": 1.0, "jogo": 1.0, "portal_verificado": 1.0,
+}
 
 
 def origem_rotulo(registro: dict) -> str:
@@ -600,8 +605,8 @@ def remover_vazamento(registros: list[dict]) -> dict[str, int]:
 
 
 SPLITS_PRODUTO = ("treino", "validacao", "teste")
-# Em validação e teste entram todos os enganosos, e falsos e verdadeiros até esta proporção
-# do número de enganosos: cerca de 38% / 25% / 38%.
+# Em validação e teste entram todos os enganosos e todos os verdadeiros, e falsos até esta
+# proporção do número de enganosos.
 PROPORCAO_AVALIACAO = 1.5
 
 
@@ -611,9 +616,12 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
     1. FakenewsBR, sub-bases de agência: entram os enganosos e os verdadeiros checados, e
        só uma amostra dos falsos de cada agência, até o maior entre os enganosos e os
        verdadeiros dela no split. Sem nenhum falso, a agência viraria pista de "não é falso".
-    2. Treino: os portais completam os verdadeiros só até igualar os falsos.
-    3. Validação e teste: todos os enganosos; falsos e verdadeiros até PROPORCAO_AVALIACAO
-       vezes os enganosos, com os verdadeiros checados e pareados antes dos de portal.
+    2. Portais (`origem_rotulo=portal`): saem do protocolo B. O "verdadeiro" deles é
+       suposição, então não completam os verdadeiros (#6, #7).
+    3. Treino: todos os falsos, enganosos e verdadeiros que sobram. Os verdadeiros ficam
+       abaixo dos falsos; os pesos por classe no treino compensam.
+    4. Validação e teste: todos os enganosos e os verdadeiros; falsos até
+       PROPORCAO_AVALIACAO vezes os enganosos.
     A amostra é determinística (ordem pelo hash do id), para o dataset ser reproduzível. O
     hash leva um prefixo próprio: sem ele, a ordem repetiria o sorteio do split (no
     FakeRecogna o grupo é o próprio id), e os registros de validação e teste, que têm hash
@@ -632,6 +640,11 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
 
     def de_agencia(r: dict) -> bool:
         return r["base"] == "fakenewsbr" and r["fonte"] not in FAKENEWSBR_MENSAGENS
+
+    for r in ativos:
+        if r["origem_rotulo"] == "portal":
+            guardar(r, "portais (fora do dataset selecionado)")
+    ativos = [r for r in ativos if r["split_produto"] != "reserva"]
 
     por_agencia: dict[tuple, int] = {}
     for r in ativos:
@@ -652,17 +665,9 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
         do_split = [r for r in ativos if r["split_produto"] == split]
         falsos = [r for r in do_split if r["veracidade"] == "falso"]
         enganosos = [r for r in do_split if r["veracidade"] == "enganoso"]
-        verdadeiros = [r for r in do_split if r["veracidade"] == "verdadeiro" and r["base"] != "verdadeiras"]
-        verdadeiros += [r for r in do_split if r["veracidade"] == "verdadeiro" and r["base"] == "verdadeiras"]
-        if split == "treino":
-            n_portal = sum(1 for r in verdadeiros if r["base"] == "verdadeiras")
-            limites = {"falso": len(falsos), "verdadeiro": max(len(falsos), len(verdadeiros) - n_portal)}
-        else:
-            alvo = int(PROPORCAO_AVALIACAO * len(enganosos))
-            limites = {"falso": alvo, "verdadeiro": alvo}
-        for classe, lista in (("falso", falsos), ("verdadeiro", verdadeiros)):
-            for r in lista[limites[classe]:]:
-                guardar(r, f"{split}: {classe}")
+        if split != "treino":
+            for r in falsos[int(PROPORCAO_AVALIACAO * len(enganosos)):]:
+                guardar(r, f"{split}: falso")
     return reserva
 
 

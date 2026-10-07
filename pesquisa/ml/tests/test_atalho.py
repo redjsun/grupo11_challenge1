@@ -1,4 +1,3 @@
-import json
 import random
 
 import pytest
@@ -7,11 +6,12 @@ from atalho import (
     N_PESOS,
     ModeloAtalho,
     auc,
-    carregar_registros,
+    mesmos_registros,
     primeira_palavra,
     rodar,
     variaveis_de_forma,
 )
+from dados import Exemplo, alvos
 
 
 def test_variaveis_de_forma():
@@ -33,10 +33,17 @@ def test_primeira_palavra_ignora_pontuacao_e_caixa():
     assert primeira_palavra("!!!") is None
 
 
-def registros_sinteticos(n: int, forma_entrega: bool, semente: int = 0) -> list[dict]:
+def exemplo(id_: str, texto: str, classe: str) -> Exemplo:
+    y1, y2 = alvos(classe)
+    return Exemplo(
+        id_, texto, classe, y1, y2, None, None, 2020, None, "teste", "agencia", 1.0, True
+    )
+
+
+def splits_sinteticos(n: int, forma_entrega: bool, semente: int = 0) -> dict[str, list[Exemplo]]:
     """Falsos terminam com ponto e verdadeiros não, se forma_entrega; senão, forma aleatória."""
     rnd = random.Random(semente)
-    registros = []
+    splits = {"treino": [], "validacao": [], "teste": []}
     for i in range(n):
         classe = ("falso", "enganoso", "verdadeiro")[i % 3]
         ponto = classe == "falso" if forma_entrega else rnd.random() < 0.5
@@ -44,31 +51,24 @@ def registros_sinteticos(n: int, forma_entrega: bool, semente: int = 0) -> list[
         texto = " ".join(
             rnd.choice(["vacina", "governo", "lula", "covid"]) for _ in range(palavras)
         )
-        registros.append(
-            {
-                "id": str(i),
-                "texto_curto": texto.capitalize() + ("." if ponto else ""),
-                "veracidade": classe,
-                "split_produto": ("treino", "treino", "validacao", "teste")[i % 4],
-                "origem_rotulo": "agencia",
-            }
-        )
-    return registros
+        split = ("treino", "treino", "validacao", "teste")[i % 4]
+        splits[split].append(exemplo(str(i), texto.capitalize() + ("." if ponto else ""), classe))
+    return splits
 
 
 def test_forma_que_entrega_a_classe_da_auc_alta():
-    resultado = rodar(registros_sinteticos(600, forma_entrega=True), "texto_curto")
+    resultado = rodar(splits_sinteticos(600, forma_entrega=True))
     assert resultado["splits"]["validacao"]["auc_por_classe"]["falso"] > 0.95
 
 
 def test_forma_aleatoria_fica_perto_do_acaso():
-    resultado = rodar(registros_sinteticos(1200, forma_entrega=False), "texto_curto")
+    resultado = rodar(splits_sinteticos(1200, forma_entrega=False))
     for split in ("validacao", "teste"):
         assert 0.4 < resultado["splits"][split]["auc_macro"] < 0.6
 
 
 def test_rodar_lista_os_pesos_por_classe():
-    resultado = rodar(registros_sinteticos(300, forma_entrega=True), "texto_curto")
+    resultado = rodar(splits_sinteticos(300, forma_entrega=True))
     assert len(resultado["pesos"]) == N_PESOS
     assert set(resultado["pesos"][0]) == {"variavel", "falso", "enganoso", "verdadeiro"}
     assert resultado["pesos"][0]["variavel"] == "termina com ponto"
@@ -81,22 +81,14 @@ def test_auc_ignora_classe_ausente_no_split():
 
 
 def test_rodar_exige_duas_classes_no_treino():
-    registros = [
-        {"texto_curto": "a", "veracidade": "falso", "split_produto": "treino"},
-        {"texto_curto": "b", "veracidade": "verdadeiro", "split_produto": "teste"},
-    ]
+    splits = {"treino": [exemplo("a", "a", "falso")], "teste": [exemplo("b", "b", "verdadeiro")]}
     with pytest.raises(ValueError):
-        rodar(registros, "texto_curto")
+        rodar(splits)
 
 
-def test_carregar_registros_tira_portal_e_splits_fora(tmp_path):
-    linhas = [
-        {"id": "a", "split_produto": "treino", "origem_rotulo": "agencia"},
-        {"id": "b", "split_produto": "treino", "origem_rotulo": "portal"},
-        {"id": "c", "split_produto": "reserva", "origem_rotulo": "agencia"},
-        {"id": "d", "split_produto": "fora", "origem_rotulo": "agencia"},
-    ]
-    caminho = tmp_path / "dataset.jsonl"
-    caminho.write_text("".join(json.dumps(r) + "\n" for r in linhas), encoding="utf-8")
-    assert [r["id"] for r in carregar_registros(caminho)] == ["a"]
-    assert [r["id"] for r in carregar_registros(caminho, com_portal=True)] == ["a", "b"]
+def test_mesmos_registros_filtra_por_id():
+    splits = splits_sinteticos(12, forma_entrega=True)
+    filtrado = mesmos_registros(splits, {"0", "2"})
+    assert [e.id for e in filtrado["treino"]] == ["0"]
+    assert [e.id for e in filtrado["validacao"]] == ["2"]
+    assert filtrado["teste"] == []

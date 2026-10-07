@@ -12,9 +12,11 @@ um classificador de veracidade treinado com bases brasileiras de fake news. Todo
 | `web/` | React 18 + Vite + TypeScript. `view → controller (hook) → service → API`; HTTP só via `services/httpClient.ts` |
 | `pesquisa/` | Tudo de dados e treinamento. Imagem e serviço `pesquisa` no compose (`Dockerfile`, `requirements.txt`) |
 | `pesquisa/dados/` | Download, coleta (scrapers e Fact Check API) e preparo dos dados |
-| `pesquisa/ml/` | Experimentos de ML: padronização pela LLM (`padronizar.py`), teste de atalho (`atalho.py`) |
+| `pesquisa/ml/` | Experimentos de ML. `dados.py` é a única porta de entrada dos dados de treino (splits, limpeza, alvos, pesos); `padronizar.py` (LLM), `atalho.py` (teste de atalho). Container `ml` (PyTorch CPU) no compose |
+| `pesquisa/anotacoes/` | Anotações da equipe (#5), versionadas: só `id` e rótulos, nunca o texto |
 | `pesquisa/notebooks/` | EDA (`eda_1_datasets.ipynb`, `eda_2_conjunto.ipynb`) |
 | `pesquisa/data/` | Fora do Git. `raw/` (bases e coletas, com cache) e `processed/` (`dataset.jsonl`) |
+| `models/` | Fora do Git. Modelos treinados, lidos pela API |
 | `doc/` | Todos os docs do projeto, inclusive os de pesquisa; índice em `doc/docs.yaml` (registrar ali cada doc novo) |
 
 ## Comandos
@@ -26,7 +28,7 @@ Tudo roda por Docker Compose (o Docker Desktop precisa estar aberto). `make help
 - `make test-ml`: lint e testes de `pesquisa/ml/`
 - `make dados`: baixa as bases para `pesquisa/data/raw/` e gera `pesquisa/data/processed/dataset.jsonl`.
   Os coletores (`pesquisa/dados/coletar_*.py`) rodam à parte e são lentos (~1 req/s, com cache)
-- `make padronizar`, `make atalho`: experimentos de `pesquisa/ml/`
+- `make padronizar`, `make atalho`, `make contagens`, `make shell-ml`: experimentos de `pesquisa/ml/`
 - `make eda`: Jupyter Lab em `:8888`
 
 Segredos ficam em `.env` (copiar de `.env.example`): `FACTCHECK_API_KEY`, `LLM_*`, `AI_*`.
@@ -40,6 +42,8 @@ Segredos ficam em `.env` (copiar de `.env.example`): `FACTCHECK_API_KEY`, `LLM_*
   `treino`/`validacao`/`teste`, mais `reserva` e `fora`, que não entram).
 - Cada classe vem de fontes com "cara" própria (ponto final, minúsculas, manchete). Fonte,
   autor e data **nunca** entram no modelo; o teste de atalho (`pesquisa/ml/atalho.py`) mede o piso.
+- O dataset selecionado não usa `origem_rotulo=portal` (verdadeiro por suposição): os portais
+  viram `reserva` no protocolo B.
 - Durante o desenvolvimento só se olha a `validacao`; o `teste` é olhado uma vez por modelo.
 
 ## Convenções de código

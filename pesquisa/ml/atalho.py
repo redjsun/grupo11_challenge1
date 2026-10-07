@@ -10,19 +10,17 @@ dela é o piso: um classificador que não passa dela com folga aprendeu o format
 veracidade. É só diagnóstico e nunca vai para a API.
 
 Versões do texto:
-    original                    `texto_curto`
-    padronizado                 `texto_padronizado`, do cache da LLM (#20), com --prompt
-    original_mesmos_registros   `texto_curto` só nos registros que também têm o padronizado,
-                                para comparar as duas versões na mesma população
+    original                       `texto_curto`
+    padronizado                    a afirmação extraída pela LLM (#20), com --prompt e --modelo
+    original_mesmos_registros      as duas versões só nos registros que têm as duas, para
+    padronizado_mesmos_registros   comparar na mesma população
 Com a padronização igualando o formato, a AUC do padronizado deve ficar abaixo da do
 original nos mesmos registros.
 
 A saída vai para pesquisa/ml/saidas/atalho.json, que o avaliar.py (#13) lê para comparar cada modelo
 com o piso.
 
-Os registros vêm de pesquisa/data/processed/dataset.jsonl, nos splits do protocolo B, sem os portais
-(como em pesquisa/ml/dados.py, #7). Quando a #7 existir, `carregar_registros` passa a usar
-`dados.carregar()`.
+Os dados vêm de `dados.carregar()` (#7): mesmos splits, limpeza e filtros dos modelos.
 """
 
 import argparse
@@ -31,7 +29,6 @@ import os
 import re
 import sys
 from collections import Counter
-from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
@@ -39,10 +36,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
-from padronizar import aplicar, caminho_cache, carregar_prompt, ler_cache
+from dados import DATASET, Exemplo, carregar
 
-RAIZ = Path(__file__).resolve().parent.parent
-DATASET = RAIZ / "data" / "processed" / "dataset.jsonl"
 SAIDA = Path(__file__).resolve().parent / "saidas" / "atalho.json"
 
 CLASSES = ("falso", "enganoso", "verdadeiro")
@@ -139,45 +134,26 @@ def auc(modelo: ModeloAtalho, textos: list[str], y: list[str]) -> dict:
     return {"registros": len(y), "auc_macro": macro, "auc_por_classe": por_classe}
 
 
-def amostras(registros: Iterable[dict], campo: str) -> dict[str, tuple[list[str], list[str]]]:
-    """Por split, os textos não vazios do campo e a veracidade."""
-    por_split = {s: ([], []) for s in SPLITS}
-    for r in registros:
-        texto = (r.get(campo) or "").strip()
-        if texto and r["split_produto"] in por_split and r["veracidade"] in CLASSES:
-            por_split[r["split_produto"]][0].append(texto)
-            por_split[r["split_produto"]][1].append(r["veracidade"])
-    return por_split
-
-
-def rodar(registros: list[dict], campo: str) -> dict:
+def rodar(splits: dict[str, list[Exemplo]]) -> dict:
     """Treina no treino e mede a AUC em cada split."""
-    dados = amostras(registros, campo)
-    textos, y = dados["treino"]
+    dados = {s: ([e.texto for e in ex], [e.veracidade for e in ex]) for s, ex in splits.items()}
+    textos, y = dados.get("treino", ([], []))
     if len(set(y)) < 2:
-        raise ValueError(f"Treino de '{campo}' sem pelo menos duas classes.")
+        raise ValueError("Treino sem pelo menos duas classes.")
     modelo = ModeloAtalho().fit(textos, y)
     return {
-        "campo": campo,
-        "splits": {s: auc(modelo, *dados[s]) for s in SPLITS if dados[s][0]},
+        "splits": {s: auc(modelo, *dados[s]) for s in SPLITS if dados.get(s, ([],))[0]},
         "pesos": modelo.pesos(),
     }
 
 
-def carregar_registros(caminho: Path = DATASET, com_portal: bool = False) -> list[dict]:
-    """Registros do protocolo B (treino, validação e teste), sem portais por padrão (#7)."""
-    registros = []
-    with open(caminho, encoding="utf-8") as entrada:
-        for linha in entrada:
-            r = json.loads(linha)
-            if r["split_produto"] in SPLITS and (com_portal or r["origem_rotulo"] != "portal"):
-                registros.append(r)
-    return registros
+def mesmos_registros(splits: dict[str, list[Exemplo]], ids: set[str]) -> dict[str, list[Exemplo]]:
+    return {s: [e for e in ex if e.id in ids] for s, ex in splits.items()}
 
 
 def imprimir(resultado: dict) -> None:
     for versao, saida in resultado["versoes"].items():
-        print(f"\n{versao} ({saida['campo']})   0,5 = acaso; 1,0 = separa tudo só pela forma")
+        print(f"\n{versao}   0,5 = acaso; 1,0 = separa tudo só pela forma")
         print(
             f"  {'split':10} {'registros':>9} {'macro':>6}  "
             + "  ".join(f"{c:>10}" for c in CLASSES)
@@ -208,23 +184,28 @@ def main():
 
     if not args.dataset.exists():
         sys.exit(f"{args.dataset} não encontrado. Rode antes: make dados")
-    registros = carregar_registros(args.dataset, args.com_portal)
-    resultado = {"dataset": str(args.dataset.name), "com_portal": args.com_portal, "versoes": {}}
-    resultado["versoes"]["original"] = rodar(registros, "texto_curto")
+    original = carregar(dataset=args.dataset, incluir_portal=args.com_portal)
+    resultado = {
+        "dataset_sha256": original.dataset_sha256,
+        "com_portal": args.com_portal,
+        "versoes": {"original": rodar(original.splits)},
+    }
 
     if args.prompt:
-        prompt = carregar_prompt(args.prompt)
-        cache = ler_cache(caminho_cache(prompt.versao), prompt, args.modelo)
-        if not cache:
-            sys.exit(
-                f"Cache da padronização {prompt.versao} com o modelo {args.modelo} vazio. "
-                "Rode antes: make padronizar"
-            )
-        padronizados = list(aplicar(registros, cache))
-        resultado["prompt"] = {"versao": prompt.versao, "sha1": prompt.sha1, "modelo": args.modelo}
-        resultado["versoes"]["padronizado"] = rodar(padronizados, "texto_padronizado")
-        mesmos = [r for r in padronizados if r["texto_padronizado"]]
-        resultado["versoes"]["original_mesmos_registros"] = rodar(mesmos, "texto_curto")
+        if not args.modelo:
+            sys.exit("Informe o modelo da padronização: --modelo ou LLM_MODEL no .env.")
+        padronizado = carregar(
+            "padronizado", args.dataset, args.prompt, args.modelo, incluir_portal=args.com_portal
+        )
+        if not any(padronizado.splits.values()):
+            sys.exit("Cache da padronização vazio para esse prompt e modelo. Rode: make padronizar")
+        resultado["prompt"] = padronizado.prompt
+        ids_p = {e.id for ex in padronizado.splits.values() for e in ex}
+        ids_o = {e.id for ex in original.splits.values() for e in ex}
+        versoes = resultado["versoes"]
+        versoes["padronizado"] = rodar(padronizado.splits)
+        versoes["original_mesmos_registros"] = rodar(mesmos_registros(original.splits, ids_p))
+        versoes["padronizado_mesmos_registros"] = rodar(mesmos_registros(padronizado.splits, ids_o))
 
     imprimir(resultado)
     args.saida.parent.mkdir(parents=True, exist_ok=True)

@@ -65,5 +65,18 @@ services:
       - ./pesquisa:/work/pesquisa
       - ./api/app/prompts:/work/api/app/prompts
 
+  # Treino e experimentos de ML: imagem com PyTorch CPU e transformers, fora da API.
+  ml:
+    build: ./pesquisa/ml
+    container_name: fakenews-ml
+    profiles: ["ml"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./pesquisa:/work/pesquisa
+      - ./api/app/prompts:/work/api/app/prompts
+      - ./models:/work/models
+
 volumes:
   db_data:
