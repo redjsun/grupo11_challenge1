@@ -5,12 +5,14 @@ Uso: python pesquisa/dados/preparar_dados.py   (só biblioteca padrão)
 Cada linha do JSONL é uma notícia com os campos:
     id, base, fonte, rotulo, veracidade, veredito_original, tipo_sugerido, titulo, texto,
     texto_curto, categoria, data, autor, url, par_id, metricas, split, split_produto,
-    origem_rotulo
+    origem_rotulo, tipo, sinais
 
 - `base`: de onde vem o rótulo (fakebr, fakerecogna, faketrue, factcheck, fakenewsbr,
   verdadeiras). Os boatos do Boatos.org entram só como a parte falsa do FakeRecogna.
-- `origem_rotulo`: por que o rótulo é confiável (agencia, curadoria, portal ou mensagem),
-  para pesar os exemplos no treino (ver ORIGEM_ROTULO).
+- `origem_rotulo`: por que o rótulo é confiável (agencia, curadoria, portal, mensagem ou
+  equipe), para pesar os exemplos no treino (ver ORIGEM_ROTULO_PESO).
+- `tipo` e `sinais`: só nos itens anotados pela equipe (pesquisa/anotacoes/consolidado.csv,
+  ver aplicar_anotacoes); nos demais, null.
 - `veracidade`: falso, enganoso ou verdadeiro. `rotulo` é a versão binária (fake ou true)
   e fica vazio (null) nos enganosos, que só existem nas bases com veredito de agência.
 - `veredito_original`: o veredito da agência, normalizado; `tipo_sugerido`: o tipo de
@@ -49,6 +51,7 @@ csv.field_size_limit(2**31 - 1)
 RAIZ = Path(__file__).resolve().parent.parent
 RAW = RAIZ / "data" / "raw"
 SAIDA = RAIZ / "data" / "processed" / "dataset.jsonl"
+ANOTACOES = RAIZ / "anotacoes" / "consolidado.csv"
 
 MESES = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
@@ -232,6 +235,36 @@ def origem_rotulo(registro: dict) -> str:
     if base == "fakenewsbr" and registro["fonte"] in FAKENEWSBR_MENSAGENS:
         return "mensagem"
     return "agencia"
+
+
+SINAIS = ("pede_compartilhamento", "urgencia", "apelo_emocional", "ataque")
+
+
+def aplicar_anotacoes(registros: list[dict], caminho: Path = ANOTACOES) -> int:
+    """Rótulo final da equipe (consolidar_anotacoes.py, #5), juntado pelo id.
+
+    O registro ganha `tipo` e `sinais`, a veracidade anotada substitui a original e a origem
+    vira `equipe`. O split é o do registro. Sátira (`fora_escopo`) sai dos dois protocolos;
+    opinião não tem veracidade anotada e fica com a original.
+    """
+    if not caminho.exists():
+        return 0
+    with open(caminho, encoding="utf-8", newline="") as entrada:
+        rotulos = {linha["id"]: linha for linha in csv.DictReader(entrada)}
+    aplicados = 0
+    for registro in registros:
+        if not (rotulo := rotulos.get(registro["id"])):
+            continue
+        registro["tipo"] = rotulo["tipo"]
+        registro["sinais"] = {sinal: int(rotulo[sinal]) for sinal in SINAIS}
+        if rotulo["veracidade"]:
+            registro["veracidade"] = rotulo["veracidade"]
+            registro["rotulo"] = ROTULO_POR_VERACIDADE[rotulo["veracidade"]]
+        registro["origem_rotulo"] = "equipe"
+        if rotulo["tipo"] == "fora_escopo":
+            registro["split"] = registro["split_produto"] = "fora"
+        aplicados += 1
+    return aplicados
 
 
 def definir_split(base: str, grupo: str) -> str:
@@ -697,7 +730,9 @@ def main():
             registro["tipo_sugerido"] = TIPO_POR_VEREDITO.get(registro["veredito_original"])
             registro["origem_rotulo"] = origem_rotulo(registro)
             registro["split_produto"] = definir_split_produto(registro)
+            registro["tipo"] = registro["sinais"] = None
             registros.append(registro)
+    anotados = aplicar_anotacoes(registros)
     removidos = remover_vazamento(registros)
     reserva = equilibrar(registros)
     contagem, com_curto = {}, {}
@@ -714,6 +749,7 @@ def main():
         for (prot, split, veracidade), n in sorted(contagem.items()):
             if prot == protocolo:
                 print(f"  {split:15} {veracidade:10} {n:6} {com_curto.get((prot, split, veracidade), 0):6}")
+    print("anotados pela equipe (origem_rotulo=equipe):", anotados)
     print("repetidos descartados por base:", repetidos)
     print("quase-duplicatas de treino/validação tiradas dos splits posteriores:", removidos)
     print("reserva (fora do protocolo B só pelo equilíbrio):", reserva)
