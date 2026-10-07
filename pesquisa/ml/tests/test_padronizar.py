@@ -1,3 +1,4 @@
+import csv
 import json
 import threading
 import urllib.error
@@ -11,6 +12,7 @@ from padronizar import (
     Prompt,
     aplicar,
     carregar_prompt,
+    exportar,
     extrator_openai,
     interpretar_resposta,
     ler_cache,
@@ -279,3 +281,43 @@ def test_extrator_openai_nao_insiste_em_erro_do_pedido(prompt):
         extrair("texto")
     servidor.server_close()
     assert len(pedidos) == 1 and esperas == []
+
+
+def test_amostra_com_limite_mantem_os_pares_juntos(tmp_path, prompt):
+    registros = [
+        {
+            "id": f"fakebr-{rotulo}-{par}",
+            "base": "fakebr",
+            "par_id": par,
+            "texto": f"{rotulo} {par}",
+        }
+        for par in range(30)
+        for rotulo in ("fake", "true")
+    ]
+    cache = tmp_path / "padronizado_v1.jsonl"
+    padronizar(registros, prompt, ExtratorContador(), cache, limite=10, log=silencioso)
+    ids = {json.loads(linha)["id"] for linha in cache.read_text(encoding="utf-8").splitlines()}
+    pares = {i.rsplit("-", 1)[1] for i in ids}
+    assert len(ids) == 10 and len(pares) == 5  # 5 pares completos, não 10 falsas
+    assert pares != {"0", "1", "2", "3", "4"}  # espalhados, não os primeiros
+
+
+def test_exportar_poe_o_original_ao_lado_da_afirmacao(tmp_path, prompt):
+    registros = [
+        {"id": "a", "base": "fakebr", "veracidade": "falso", "texto": "Texto longo da notícia."},
+        {"id": "b", "base": "fakebr", "veracidade": "verdadeiro", "texto": "Outro texto."},
+    ]
+    cache = {
+        "a": {
+            "afirmacoes": [
+                {"texto": "Afirmação 1", "quem_disse": "Fulano"},
+                {"texto": "Afirmação 2"},
+            ]
+        }
+    }
+    destino = tmp_path / "conferencia.csv"
+    assert exportar(registros, cache, destino) == 1
+    linhas = list(csv.DictReader(open(destino, encoding="utf-8-sig")))
+    assert linhas[0]["texto_original"] == "Texto longo da notícia."
+    assert linhas[0]["afirmacao_1"] == "Afirmação 1" and linhas[0]["quem_disse_1"] == "Fulano"
+    assert linhas[0]["n_afirmacoes"] == "2" and linhas[0]["demais_afirmacoes"] == "Afirmação 2"

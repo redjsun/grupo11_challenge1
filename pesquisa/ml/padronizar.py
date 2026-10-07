@@ -31,10 +31,16 @@ do pedido, para opções do provedor, como desligar o raciocínio do Qwen3. Erro
 falhas de rede ganham novas tentativas com espera crescente.
 `--provedor fake` devolve o próprio texto, para testar o fluxo sem LLM.
 
+Amostra antes do lote inteiro: `--base fakebr --limite 100` processa 100 registros só do
+Fake.br, espalhados pelo dataset e com as duas notícias de cada par juntas (a falsa e a
+verdadeira do mesmo assunto). `--exportar` grava pesquisa/data/conferencia/padronizacao_<versao>.csv
+(fora do Git) com o texto original ao lado das afirmações extraídas, para conferir à mão.
+
 Só biblioteca padrão, como pesquisa/dados/preparar_dados.py.
 """
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -51,6 +57,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 PROCESSED = RAIZ / "data" / "processed"
+CONFERENCIA = RAIZ / "data" / "conferencia"
 DATASET = PROCESSED / "dataset.jsonl"
 
 # O prompt recebe o texto neste marcador; sem ele, o texto vai depois do prompt.
@@ -294,9 +301,10 @@ def padronizar(
         if texto is None:
             relatorio.sem_texto += 1
             continue
-        pendentes.append((registro["id"], texto))
+        pendentes.append((registro["id"], texto, ordem_amostra(registro)))
     if limite is not None:
-        pendentes = pendentes[:limite]
+        # Amostra espalhada pelo dataset, com os registros do mesmo par lado a lado.
+        pendentes = sorted(pendentes, key=lambda p: p[2])[:limite]
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     trava = threading.Lock()
@@ -309,7 +317,7 @@ def padronizar(
         open(cache_path, "a", encoding="utf-8", newline="\n") as saida,
         ThreadPoolExecutor(max_workers=paralelo) as pool,
     ):
-        futuros = [pool.submit(processar, id_, texto) for id_, texto in pendentes]
+        futuros = [pool.submit(processar, id_, texto) for id_, texto, _ in pendentes]
         for n, futuro in enumerate(as_completed(futuros), 1):
             try:
                 id_, extracao = futuro.result()
@@ -336,6 +344,40 @@ def padronizar(
                 log(f"  {n}/{len(pendentes)} ({time.monotonic() - inicio:.0f} s)")
     relatorio.segundos = time.monotonic() - inicio
     return relatorio
+
+
+def ordem_amostra(registro: dict) -> tuple[str, str]:
+    """Chave da amostra: hash do par (ou do id), e o id para desempatar dentro do par."""
+    grupo = registro["id"]
+    if registro.get("par_id") is not None:
+        grupo = f"{registro.get('base')}-par-{registro['par_id']}"
+    return hashlib.sha1(f"amostra-{grupo}".encode()).hexdigest(), registro["id"]
+
+
+def exportar(registros: Iterable[dict], cache: dict[str, dict], destino: Path) -> int:
+    """CSV para conferência: texto original e afirmações extraídas, lado a lado."""
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    linhas = 0
+    with open(destino, "w", encoding="utf-8-sig", newline="") as saida:
+        escritor = csv.writer(saida)
+        escritor.writerow(
+            ["id", "base", "veracidade", "split_produto", "texto_original", "n_afirmacoes"]
+            + ["afirmacao_1", "quem_disse_1", "demais_afirmacoes"]
+        )
+        for registro in registros:
+            item = cache.get(registro["id"])
+            if not item:
+                continue
+            afirmacoes = item["afirmacoes"]
+            primeira = afirmacoes[0] if afirmacoes else {}
+            escritor.writerow(
+                [registro["id"], registro.get("base"), registro.get("veracidade")]
+                + [registro.get("split_produto"), (texto_de_entrada(registro) or "")[:1500]]
+                + [len(afirmacoes), primeira.get("texto", ""), primeira.get("quem_disse") or ""]
+                + [" | ".join(a["texto"] for a in afirmacoes[1:])]
+            )
+            linhas += 1
+    return linhas
 
 
 def aplicar(registros: Iterable[dict], cache: dict[str, dict]) -> Iterable[dict]:
@@ -373,6 +415,10 @@ def main():
     parser.add_argument("--limite", type=int, help="processa no máximo N itens novos")
     parser.add_argument("--sem-esquema", action="store_true", help="não envia response_format")
     parser.add_argument("--max-caracteres", type=int, default=MAX_CARACTERES)
+    parser.add_argument("--base", nargs="+", help="só estas bases (ex.: fakebr)")
+    parser.add_argument(
+        "--exportar", action="store_true", help="CSV de conferência do que já está no cache"
+    )
     args = parser.parse_args()
 
     if not args.dataset.exists():
@@ -394,9 +440,19 @@ def main():
             extra=json.loads(os.environ.get("LLM_EXTRA_BODY") or "{}"),
         )
 
+    def registros():
+        for registro in ler_dataset(args.dataset):
+            if not args.base or registro.get("base") in args.base:
+                yield registro
+
     cache_path = caminho_cache(prompt.versao)
+    if args.exportar:
+        destino = CONFERENCIA / f"padronizacao_{prompt.versao}.csv"
+        n = exportar(registros(), ler_cache(cache_path, prompt, modelo), destino)
+        print(f"{n} registros em {destino.relative_to(RAIZ)}")
+        return
     relatorio = padronizar(
-        ler_dataset(args.dataset),
+        registros(),
         prompt,
         extrator,
         cache_path,
