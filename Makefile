@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados padronizar atalho contagens test-ml shell-ml eda clean
+.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados padronizar atalho contagens referencia avaliar test-ml shell-ml eda clean
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -73,6 +73,16 @@ atalho: ## Teste de atalho: AUC só pela forma do texto (uso: make atalho [ARGS=
 
 contagens: ## Contagens por split e classe do conjunto de treino (pesquisa/ml/dados.py)
 	$(ML) python pesquisa/ml/dados.py
+
+CONFIG ?= pesquisa/ml/configs/referencia.toml
+
+referencia: ## Treina a referência TF-IDF ordinal (uso: make referencia [CONFIG=pesquisa/ml/configs/referencia-padronizado.toml])
+	$(ML) python pesquisa/ml/treinar_referencia.py --config $(CONFIG)
+
+MODELO ?= models/2026-11/referencia
+
+avaliar: ## Avalia modelo(s) na validação (uso: make avaliar [MODELO="models/2026-11/referencia models/2026-11/bert"] [ARGS=--teste])
+	$(ML) python pesquisa/ml/avaliar.py --modelo $(MODELO) $(ARGS)
 
 shell-ml: ## Abre um shell no container de treino
 	$(ML) bash
