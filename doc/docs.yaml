@@ -13,7 +13,7 @@ docs:
   - id: planejamento-retreino
     titulo: Planejamento de coleta contínua e retreino
     arquivo: doc/planejamento-retreino.md
-    descricao: Plano futuro (não implementado) de agendamento com supercronic, portão de qualidade e versionamento de modelos.
+    descricao: Coleta diária com supercronic (implementada) e plano do retreino, com portão de qualidade e versionamento de modelos.
   - id: guia-classificacao
     titulo: Guia de classificação e anotação
     arquivo: doc/guia-classificacao.md

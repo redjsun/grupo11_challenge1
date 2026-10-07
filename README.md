@@ -106,6 +106,21 @@ Os coletores usam `requests` e `beautifulsoup4` (`pesquisa/requirements.txt`), e
 1 s entre requisições ao mesmo site e guardam as páginas em cache em `pesquisa/data/raw/`, então
 rodar de novo só baixa o que falta. O preparo usa só a biblioteca padrão.
 
+**Coleta diária.** O serviço `agendador` do compose (sobe com `make up`) roda
+`pesquisa/crontab` com o [supercronic](https://github.com/aptible/supercronic): às 3h,
+`coletar_factcheck.py --incremental` (só as páginas com checagens novas, uma requisição por
+agência quando não há nada novo) e depois `preparar_dados.py`. Cada coleta acrescenta uma linha
+em `pesquisa/data/raw/factcheck/execucoes.jsonl`, com as checagens novas e as requisições por
+agência. Os logs ficam em `docker compose logs agendador`.
+
+**Anotação da equipe** (`doc/guia-classificacao.md` §7, `pesquisa/anotacoes/README.md`):
+
+```bash
+python pesquisa/dados/sortear_anotacao.py --rodada 1 --anotadores ana bruno --itens 600
+python pesquisa/dados/consolidar_anotacoes.py importar --rodada 1 pesquisa/data/anotacao/rodada-01-*.csv
+python pesquisa/dados/consolidar_anotacoes.py          # concordância e anotacoes/consolidado.csv
+```
+
 | Base | Classe | Origem | O que entra |
 |------|--------|--------|-------------|
 | Fake.br-Corpus | fake e true | [roneysco/Fake.br-Corpus](https://github.com/roneysco/Fake.br-Corpus) (NILC/USP), commit `780f551` | 3.600 pares de 2016–2018 |
@@ -134,9 +149,10 @@ classes são equilibradas, e o que sobra vira `reserva`:
 | `validacao` | 1.446 | 964 | 1.446 |
 | `teste` | 1.638 | 1.092 | 1.638 |
 
-Cada registro tem um `origem_rotulo` (`agencia`, `curadoria`, `portal` ou `mensagem`) para
-pesar os exemplos no treino: portal e mensagem valem menos, porque o rótulo "verdadeiro"
-deles é suposição ou só quer dizer "não é desinformação".
+Cada registro tem um `origem_rotulo` (`agencia`, `curadoria`, `portal`, `mensagem` ou
+`equipe`) para pesar os exemplos no treino: portal e mensagem valem menos, porque o rótulo
+"verdadeiro" deles é suposição ou só quer dizer "não é desinformação". Os itens anotados pela
+equipe (`pesquisa/anotacoes/consolidado.csv`) ganham `tipo`, `sinais` e `origem_rotulo=equipe`.
 
 **Licenças.** O Fake.br e o FakeTrue.Br não declaram licença. FakeRecogna e a compilação da FakenewsBR
 são MIT, mas o conteúdo de terceiros na FakenewsBR segue os termos das fontes

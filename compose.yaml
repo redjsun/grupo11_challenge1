@@ -65,6 +65,21 @@ services:
       - ./pesquisa:/work/pesquisa
       - ./api/app/prompts:/work/api/app/prompts
 
+  # Coleta diária e preparo dos dados nos horários de pesquisa/crontab (supercronic).
+  agendador:
+    build: ./pesquisa
+    container_name: fakenews-agendador
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: America/Sao_Paulo
+    command: supercronic /work/pesquisa/crontab
+    volumes:
+      - ./pesquisa:/work/pesquisa
+      - ./models:/work/models
+
   # Treino e experimentos de ML: imagem com PyTorch CPU e transformers, fora da API.
   ml:
     build: ./pesquisa/ml

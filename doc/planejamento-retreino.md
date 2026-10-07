@@ -1,7 +1,8 @@
 # Planejamento: coleta contínua e retreino do classificador
 
-> **Status: planejado, não implementado.** Depende de termos o primeiro modelo treinado
-> e avaliado (`pesquisa/ml/treinar.py` e `pesquisa/ml/avaliar.py` ainda não existem).
+> **Status:** a coleta diária está implementada (serviço `agendador` e `pesquisa/crontab`,
+> issue #4). O retreino mensal depende de termos o primeiro modelo treinado e avaliado
+> (`pesquisa/ml/treinar.py` e `pesquisa/ml/avaliar.py` ainda não existem).
 
 ## Por que retreinar
 
@@ -38,39 +39,58 @@ Se o projeto crescer, a migração para um orquestrador é direta: cada linha do
 ## Desenho
 
 ```
-diário   coletar_factcheck ─┐
-         coletar_verdadeiras┼─> (dados novos em pesquisa/data/raw/, incremental pelo cache)
-         coletar_boatos ────┘
+diário   coletar_factcheck --incremental ─> preparar_dados      (implementado)
 
 mensal   preparar_dados ─> treinar ─> avaliar ─┬─> publicar em models/ (se melhor)
                                                └─> manter o modelo atual (se pior)
 ```
 
-Rascunho do `pesquisa/ml/crontab`:
+O `pesquisa/crontab` hoje:
 
 ```cron
-# coleta incremental diária (só baixa o que é novo, graças ao cache)
-0 3 * * *  python pesquisa/dados/coletar_factcheck.py && python pesquisa/dados/coletar_verdadeiras.py --de $(date +%Y-%m)
-# retreino mensal, no dia 1, com portão de qualidade
-0 5 1 * *  python pesquisa/dados/preparar_dados.py && python pesquisa/ml/treinar.py && python pesquisa/ml/avaliar.py --publicar-se-melhor
+0 3 * * * python pesquisa/dados/coletar_factcheck.py --incremental && python pesquisa/dados/preparar_dados.py
 ```
 
-Rascunho do serviço no `compose.yaml`:
+Quando o retreino existir, entra uma linha mensal, por exemplo
+`0 5 1 * * python pesquisa/dados/preparar_dados.py && python pesquisa/ml/treinar.py && python pesquisa/ml/avaliar.py --publicar-se-melhor`.
+O treino precisa do PyTorch da imagem `pesquisa/ml/`: nesse momento o agendador passa a usar
+essa imagem ou ganha um segundo serviço.
+
+O serviço no `compose.yaml` usa a imagem de `pesquisa/` (o `Dockerfile` instala o binário do
+supercronic, conferido por SHA-1) e sobe com `docker compose up`:
 
 ```yaml
   agendador:
-    build: ./notebooks          # mesmo ambiente Python da EDA e do treino
-    command: supercronic /work/ml/crontab
-    env_file: .env              # FACTCHECK_API_KEY
-    volumes:
-      - ./scripts:/work/scripts
-      - ./ml:/work/ml
-      - ./data:/work/data
-      - ./models:/work/models   # a API lê o modelo publicado daqui
+    build: ./pesquisa
     restart: unless-stopped
+    env_file: .env                     # FACTCHECK_API_KEY
+    environment:
+      TZ: America/Sao_Paulo            # horário do crontab
+    command: supercronic /work/pesquisa/crontab
+    volumes:
+      - ./pesquisa:/work/pesquisa
+      - ./models:/work/models          # a API lê o modelo publicado daqui
 ```
 
-A imagem precisa ganhar o binário do supercronic no `Dockerfile`.
+Para testar um horário próximo sem mexer no `crontab`:
+`docker compose run --rm agendador supercronic -test /work/pesquisa/crontab` confere a sintaxe,
+e um `crontab` temporário com `* * * * *` roda a tarefa no minuto seguinte.
+
+### Fontes da coleta diária
+
+- **Fact Check API**: modo `--incremental`. A API devolve as checagens da mais recente para
+  a mais antiga, e a paginação de cada agência para na primeira página sem checagem nova.
+  Medido em 07/10/2026: com o arquivo de 06/10 (11.910 checagens), a primeira execução trouxe
+  601 checagens novas em 65 requisições; a segunda, logo depois, 0 novas em 15 requisições
+  (uma por agência). O modo completo percorria até 500 páginas por agência.
+- **Boatos.org**: decisão (a), entra só se vier pela Fact Check API. O `--descobrir` de
+  07/10/2026 não achou o Boatos.org entre os publicadores em português, e o filtro
+  `boatos.org` devolve 0 checagens. Falsos recentes já vêm das outras agências; o
+  `coletar_boatos.py` continua só para recoletar o FakeRecogna (2019–2021).
+- **Notícias recentes** (fonte em decisão na #34): só como afirmações para analisar, sem
+  rótulo e fora do `dataset.jsonl`.
+- **Portais (`coletar_verdadeiras.py`)**: fora da coleta diária. O "verdadeiro" deles é
+  suposição; os verdadeiros do treino vêm do dataset confiável (#6).
 
 ## Requisitos para implementar
 
@@ -82,10 +102,7 @@ A imagem precisa ganhar o binário do supercronic no `Dockerfile`.
    lê o modelo publicado (por exemplo `models/atual`).
 3. **Monitoramento.** Registrar a proporção de previsões *fake* por dia. Uma mudança
    brusca indica *drift* ou que alguma fonte mudou de formato.
-4. **Coleta incremental.** `coletar_verdadeiras.py --de AAAA-MM` já limita o período.
-   Falta o mesmo no `coletar_factcheck.py` (hoje ele percorre todas as páginas de cada
-   agência). O `coletar_boatos.py` só recoleta as falsas do FakeRecogna e não entra na
-   coleta contínua: falsos recentes vêm da Fact Check API.
+4. **Coleta incremental.** Feita no `coletar_factcheck.py --incremental` (ver acima).
 5. **Mesmo formato no treino e no uso.** Se o modelo for treinado com `texto_curto`
    (título ou alegação), a classificação diária também usa o título.
 
@@ -93,4 +110,4 @@ A imagem precisa ganhar o binário do supercronic no `Dockerfile`.
 
 1. Fechar a EDA (`pesquisa/notebooks/eda_1_datasets.ipynb` e `pesquisa/notebooks/eda_2_conjunto.ipynb`).
 2. Treinar e avaliar o primeiro modelo (`pesquisa/ml/`), medindo a queda no teste temporal.
-3. Com essa medida, definir a frequência e implementar o agendador.
+3. Com essa medida, definir a frequência e acrescentar o retreino ao `pesquisa/crontab`.
