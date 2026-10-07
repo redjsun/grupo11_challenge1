@@ -1,4 +1,4 @@
-import { User, UserStats, GameStats } from "../types";
+import { User, UserStats, GameStats, Achievement } from "../types";
 
 const USERS_STORAGE_KEY = "fako_registered_users";
 const SESSION_STORAGE_KEY = "fako_active_session";
@@ -6,9 +6,47 @@ const STATS_STORAGE_KEY_PREFIX = "fako_stats_";
 
 interface StoredUser {
   username: string;
-  passwordHash: string; // Simulação de hash local
+  passwordHash: string;
   createdAt: number;
 }
+
+const DEFAULT_ACHIEVEMENTS: Achievement[] = [
+  {
+    id: "first_check",
+    title: "Primeira Checagem",
+    description: "Completou a avaliação da sua primeira maçã no FAKO.",
+    icon: "🍏",
+    unlocked: false,
+  },
+  {
+    id: "bullseye",
+    title: "Na Mosca!",
+    description: "Acertou a confiabilidade com 100% de exatidão (diferença zero).",
+    icon: "🎯",
+    unlocked: false,
+  },
+  {
+    id: "level_up",
+    title: "Subindo de Nível",
+    description: "Alcançou o Nível 2 ou superior no jogo da cobrinha.",
+    icon: "⚡",
+    unlocked: false,
+  },
+  {
+    id: "imune",
+    title: "Muralha Antifake",
+    description: "Acertou 5 perguntas sem errar nenhuma na mesma partida.",
+    icon: "🛡️",
+    unlocked: false,
+  },
+  {
+    id: "master",
+    title: "Mestre dos Fatos",
+    description: "Concluiu com maestria todos os 6 níveis do FAKO!",
+    icon: "👑",
+    unlocked: false,
+  },
+];
 
 class AuthService {
   private getStoredUsers(): Record<string, StoredUser> {
@@ -24,11 +62,6 @@ class AuthService {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
   }
 
-  /**
-   * Realiza login simulado via localStorage.
-   * Estruturado para ser facilmente substituído por:
-   * const res = await fetch('/api/auth/login', { method: 'POST', body: ... });
-   */
   public async login(username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
     const cleanUser = username.trim();
     if (!cleanUser || !password) {
@@ -51,11 +84,6 @@ class AuthService {
     return { success: true, user: sessionUser };
   }
 
-  /**
-   * Realiza cadastro simulado via localStorage.
-   * Estruturado para ser facilmente substituído por:
-   * const res = await fetch('/api/auth/register', { method: 'POST', body: ... });
-   */
   public async register(username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
     const cleanUser = username.trim();
     if (cleanUser.length < 3) {
@@ -88,14 +116,50 @@ class AuthService {
 
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
 
-    // Inicializa estatísticas para o novo usuário
     this.saveUserStats(cleanUser, {
       highScore: 0,
       maxLevel: 1,
       gamesPlayed: 0,
       totalAcertos: 0,
       totalErros: 0,
+      streakDays: 1,
       hasSeenTutorial: false,
+      categoryStats: {
+        saude: { acertos: 0, total: 0 },
+        tecnologia: { acertos: 0, total: 0 },
+        gerais: { acertos: 0, total: 0 },
+      },
+      achievements: DEFAULT_ACHIEVEMENTS,
+    });
+
+    return { success: true, user: sessionUser };
+  }
+
+  public async loginAsGuest(): Promise<{ success: boolean; user?: User }> {
+    const guestNum = Math.floor(100 + Math.random() * 900);
+    const guestName = `Visitante_${guestNum}`;
+    const sessionUser: User = {
+      username: guestName,
+      createdAt: Date.now(),
+    };
+
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+
+    // Salvar stats padrão para o convidado
+    this.saveUserStats(guestName, {
+      highScore: 0,
+      maxLevel: 1,
+      gamesPlayed: 0,
+      totalAcertos: 0,
+      totalErros: 0,
+      streakDays: 1,
+      hasSeenTutorial: false,
+      categoryStats: {
+        saude: { acertos: 0, total: 0 },
+        tecnologia: { acertos: 0, total: 0 },
+        gerais: { acertos: 0, total: 0 },
+      },
+      achievements: DEFAULT_ACHIEVEMENTS,
     });
 
     return { success: true, user: sessionUser };
@@ -117,7 +181,19 @@ class AuthService {
   public getUserStats(username: string): UserStats {
     try {
       const data = localStorage.getItem(STATS_STORAGE_KEY_PREFIX + username.toLowerCase());
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (!parsed.achievements) parsed.achievements = DEFAULT_ACHIEVEMENTS;
+        if (!parsed.categoryStats) {
+          parsed.categoryStats = {
+            saude: { acertos: 0, total: 0 },
+            tecnologia: { acertos: 0, total: 0 },
+            gerais: { acertos: 0, total: 0 },
+          };
+        }
+        if (!parsed.streakDays) parsed.streakDays = 1;
+        return parsed;
+      }
     } catch {
       // Ignora erro
     }
@@ -127,7 +203,14 @@ class AuthService {
       gamesPlayed: 0,
       totalAcertos: 0,
       totalErros: 0,
+      streakDays: 1,
       hasSeenTutorial: false,
+      categoryStats: {
+        saude: { acertos: 0, total: 0 },
+        tecnologia: { acertos: 0, total: 0 },
+        gerais: { acertos: 0, total: 0 },
+      },
+      achievements: DEFAULT_ACHIEVEMENTS,
     };
   }
 
@@ -137,15 +220,44 @@ class AuthService {
 
   public recordGameFinished(username: string, gameStats: GameStats): void {
     const current = this.getUserStats(username);
+    const newAchievements = [...current.achievements];
+
+    // Atualiza conquistas
+    const unlock = (id: string) => {
+      const ach = newAchievements.find((a) => a.id === id);
+      if (ach && !ach.unlocked) {
+        ach.unlocked = true;
+        ach.unlockedAt = Date.now();
+      }
+    };
+
+    if (gameStats.totalApples > 0) unlock("first_check");
+    if (gameStats.level >= 2) unlock("level_up");
+    if (gameStats.acertos >= 5) unlock("imune");
+    if (gameStats.level >= 6) unlock("master");
+
     const updated: UserStats = {
       highScore: Math.max(current.highScore, gameStats.score),
       maxLevel: Math.max(current.maxLevel, gameStats.level),
       gamesPlayed: current.gamesPlayed + 1,
       totalAcertos: current.totalAcertos + gameStats.acertos,
       totalErros: current.totalErros + gameStats.erros,
+      streakDays: Math.max(1, current.streakDays),
       hasSeenTutorial: true,
+      categoryStats: current.categoryStats,
+      achievements: newAchievements,
     };
     this.saveUserStats(username, updated);
+  }
+
+  public recordBullseye(username: string): void {
+    const current = this.getUserStats(username);
+    const ach = current.achievements.find((a) => a.id === "bullseye");
+    if (ach && !ach.unlocked) {
+      ach.unlocked = true;
+      ach.unlockedAt = Date.now();
+      this.saveUserStats(username, current);
+    }
   }
 
   public hasSeenTutorial(username: string): boolean {

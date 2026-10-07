@@ -1,5 +1,6 @@
 import React from "react";
 import { soundEffects } from "../services/audioService";
+import { FakoLogo } from "./FakoLogo";
 
 interface HeaderProps {
   score: number;
@@ -9,7 +10,7 @@ interface HeaderProps {
   maxLevels: number;
   isMuted: boolean;
   onToggleMute: () => void;
-  theme: "auto" | "light" | "dark";
+  theme: "light" | "dark";
   onToggleTheme: () => void;
   onGoHome?: () => void;
   username?: string;
@@ -34,11 +35,10 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="fako-header">
       <div className="header-top">
         <div className="logo-group">
-          <span className="logo-icon" aria-hidden="true">🍏</span>
-          <div className="logo-titles">
-            <h1 className="logo-text">FAKO</h1>
-            <span className="logo-subtitle">{username ? `Jogador: ${username}` : "Checador da Cobrinha"}</span>
-          </div>
+          <FakoLogo
+            size="small"
+            subtitle={username ? `Jogador: ${username}` : "Checador da Cobrinha"}
+          />
         </div>
 
         <div className="header-actions">
@@ -68,10 +68,10 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             className="icon-button"
             onClick={onToggleTheme}
-            title={`Tema atual: ${theme === "auto" ? "Sistema" : theme === "dark" ? "Escuro" : "Claro"}`}
+            title={`Tema atual: ${theme === "dark" ? "Escuro" : "Claro"} (Clique para alternar)`}
             aria-label="Alternar tema visual"
           >
-            {theme === "dark" ? "🌙" : theme === "light" ? "☀️" : "🌓"}
+            {theme === "dark" ? "🌙" : "☀️"}
           </button>
         </div>
       </div>

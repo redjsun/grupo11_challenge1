@@ -1,37 +1,60 @@
 import React, { useState } from "react";
 import { authService } from "../services/authService";
 import { User } from "../types";
+import fakoSnakeImg from "../assets/fako-snake.png";
+import { FakoLogo } from "./FakoLogo";
 
 interface LoginScreenProps {
   onLoginSuccess: (user: User) => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const [mode, setMode] = useState<"login" | "register">("login");
+export const LoginScreen: React.FC<LoginScreenProps> = ({
+  onLoginSuccess,
+  theme,
+  onToggleTheme,
+}) => {
+  const [tab, setTab] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isAccordionOpen, setIsAccordionOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoNotice, setInfoNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfoNotice(null);
+
+    if (!username.trim()) {
+      setError("Por favor, digite seu nome de usuário.");
+      return;
+    }
+    if (!password.trim()) {
+      setError("Por favor, digite sua senha.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      if (mode === "login") {
-        const result = await authService.login(username, password);
+      if (tab === "login") {
+        const result = await authService.login(username.trim(), password);
         if (result.success && result.user) {
           onLoginSuccess(result.user);
         } else {
-          setError(result.error || "Erro ao realizar login.");
+          setError(result.error || "Nome de usuário ou senha incorretos.");
         }
       } else {
-        const result = await authService.register(username, password);
+        const result = await authService.register(username.trim(), password);
         if (result.success && result.user) {
           onLoginSuccess(result.user);
         } else {
-          setError(result.error || "Erro ao criar conta.");
+          setError(result.error || "Não foi possível criar a conta.");
         }
       }
     } catch {
@@ -41,163 +64,395 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleToggleMode = (newMode: "login" | "register") => {
-    setMode(newMode);
+  const handleGuestLogin = async () => {
     setError(null);
+    setInfoNotice(null);
+    setIsLoading(true);
+    try {
+      const result = await authService.loginAsGuest();
+      if (result.success && result.user) {
+        onLoginSuccess(result.user);
+      } else {
+        setError("Não foi possível entrar como visitante.");
+      }
+    } catch {
+      setError("Erro ao acessar como visitante.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = () => {
+    setError(null);
+    setInfoNotice(
+      "Para este ambiente de testes, acesse como visitante ou cadastre uma nova conta na aba 'Criar conta'."
+    );
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-layout">
-        {/* Banner Ilustrativo Verde (estilo Figma) */}
-        <div className="auth-banner">
-          <div className="banner-badge">🍏 FAKO Game</div>
-          <h2 className="banner-title">Jogue.<br />Analise.<br />Aprenda.</h2>
-          <p className="banner-description">
-            Treine sua mente para checar fatos e combater fake news enquanto domina a mecânica ágil da cobrinha.
-          </p>
+    <main className="fako-auth-viewport">
+      <div className="fako-auth-card">
+        {/* ================= PAINEL ESQUERDO: IDENTIDADE VISUAL ================= */}
+        <section className="fako-brand-panel" aria-label="Identidade FAKO">
+          {/* Topo: Logo FAKO (3 quadrados da cobrinha + 1 maçã circular + texto FAKO em branco) */}
+          <header className="fako-brand-header">
+            <FakoLogo size="large" textColor="#ffffff" />
+          </header>
 
-          <div className="banner-snake-card" aria-hidden="true">
-            <div className="mini-board">
-              <div className="mini-snake-head">
-                <div className="mini-eye"></div>
-                <div className="mini-eye"></div>
-              </div>
-              <div className="mini-snake-body"></div>
-              <div className="mini-snake-body"></div>
-              <div className="mini-apple">🍏</div>
+          {/* Título Principal com hierarquia estrita */}
+          <div className="fako-brand-body">
+            <h1 className="fako-main-headline">
+              <span className="headline-row">Jogue.</span>
+              <span className="headline-row">Analise.</span>
+              <span className="headline-row headline-accent">Aprenda.</span>
+            </h1>
+
+            {/* Texto Pedagógico Principal */}
+            <p className="fako-hero-description">
+              Guie a cobrinha, colete maçãs e descubra o nível de confiabilidade de cada notícia.
+            </p>
+
+            {/* Linha Divisória Minimalista */}
+            <div className="fako-brand-bar" aria-hidden="true" />
+
+            {/* Mensagem Complementar */}
+            <div className="fako-complementary-msg">
+              <p>Aprenda a analisar informações.</p>
+              <p>Questione antes de compartilhar.</p>
             </div>
-            <span className="mini-caption">100% de fatos validados</span>
           </div>
-        </div>
 
-        {/* Card do Formulário */}
-        <div className="auth-form-card">
-          <div className="auth-form-header">
-            <div className="auth-logo-row">
-              <span className="auth-logo-icon">🍏</span>
-              <h1 className="auth-logo-text">FAKO</h1>
+          {/* Ilustração: Cobrinha FAKO Fiel à Imagem */}
+          <div className="fako-illustration-area" aria-hidden="true">
+            <img
+              src={fakoSnakeImg}
+              alt="Cobrinha e Maçã do FAKO"
+              className="fako-snake-img"
+              loading="eager"
+            />
+          </div>
+        </section>
+
+        {/* ================= PAINEL DIREITO: EXPERIÊNCIA DE ACESSO ================= */}
+        <section className="fako-form-panel" aria-label="Acesso e Autenticação">
+          {/* Barra Superior: Abas e Controle de Tema */}
+          <div className="fako-top-toolbar">
+            {/* Abas Superiores Pílula: Entrar | Criar conta */}
+            <div className="fako-tabs-pill" role="tablist" aria-label="Opções de autenticação">
+              <button
+                type="button"
+                role="tab"
+                id="fako-tab-login"
+                aria-selected={tab === "login"}
+                aria-controls="fako-auth-form"
+                className={`tab-pill-btn ${tab === "login" ? "active" : ""}`}
+                onClick={() => {
+                  setTab("login");
+                  setError(null);
+                  setInfoNotice(null);
+                }}
+              >
+                Entrar
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="fako-tab-register"
+                aria-selected={tab === "register"}
+                aria-controls="fako-auth-form"
+                className={`tab-pill-btn ${tab === "register" ? "active" : ""}`}
+                onClick={() => {
+                  setTab("register");
+                  setError(null);
+                  setInfoNotice(null);
+                }}
+              >
+                Criar conta
+              </button>
             </div>
-            <p className="auth-subtitle">
-              {mode === "login"
-                ? "Entre para continuar sua jornada de checagem"
-                : "Crie seu usuário para começar a jogar"}
+
+            {/* Alternador de Tema: Sol | Chave Switch | Lua */}
+            <div className="fako-theme-switch-wrap">
+              <button
+                type="button"
+                className="fako-theme-toggle-btn"
+                role="switch"
+                aria-checked={theme === "dark"}
+                onClick={onToggleTheme}
+                title={`Alternar para tema ${theme === "light" ? "escuro" : "claro"}`}
+                aria-label={`Alternar para tema ${theme === "light" ? "escuro" : "claro"}`}
+              >
+                {/* Ícone de Sol */}
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`theme-icon sun-icon ${theme === "light" ? "active" : ""}`}
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="4" fill="currentColor" />
+                  <path
+                    d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41m14.14-14.14l-1.41 1.41"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+
+                {/* Cápsula deslizante */}
+                <span className="theme-toggle-track">
+                  <span className={`theme-toggle-thumb ${theme === "dark" ? "checked" : ""}`} />
+                </span>
+
+                {/* Ícone de Lua */}
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`theme-icon moon-icon ${theme === "dark" ? "active" : ""}`}
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Saudação e Boas-Vindas */}
+          <div className="fako-greeting-block">
+            <h2 className="greeting-title">
+              {tab === "login" ? "Bem-vindo ao FAKO! 👋" : "Crie sua conta no FAKO! 🚀"}
+            </h2>
+            <p className="greeting-subtitle">
+              {tab === "login"
+                ? "Entre para continuar sua jornada de onde parou."
+                : "Cadastre seu usuário e senha para salvar seu progresso."}
             </p>
           </div>
 
-          {/* Abas Entrar / Criar Conta */}
-          <div className="auth-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "login"}
-              className={`auth-tab ${mode === "login" ? "active" : ""}`}
-              onClick={() => handleToggleMode("login")}
-            >
-              Entrar
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "register"}
-              className={`auth-tab ${mode === "register" ? "active" : ""}`}
-              onClick={() => handleToggleMode("register")}
-            >
-              Criar conta
-            </button>
-          </div>
+          {/* Feedback de Notificação Informativa */}
+          {infoNotice && (
+            <div className="fako-notice-banner" role="status">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+              <span>{infoNotice}</span>
+            </div>
+          )}
 
-          {/* Banner de Erro */}
+          {/* Feedback de Erro Acessível */}
           {error && (
-            <div className="auth-error-banner" role="alert">
-              <span className="error-icon">⚠️</span>
+            <div className="fako-error-banner" role="alert" aria-live="assertive">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
               <span>{error}</span>
             </div>
           )}
 
-          {/* Formulário */}
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="auth-username" className="form-label">
+          {/* Formulário Principal */}
+          <form
+            id="fako-auth-form"
+            className="fako-auth-form"
+            onSubmit={handleSubmit}
+            noValidate
+          >
+            {/* Campo: Nome de usuário */}
+            <div className="fako-field-group">
+              <label htmlFor="fako-input-username" className="fako-field-label">
                 Nome de usuário
               </label>
-              <div className="input-wrapper">
-                <span className="input-icon" aria-hidden="true">👤</span>
+              <div className="fako-input-container">
+                <span className="input-icon-slot" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </span>
                 <input
-                  id="auth-username"
+                  id="fako-input-username"
                   type="text"
-                  className="form-input"
-                  placeholder="Ex: cobrinha_curiosa"
+                  className="fako-input-element"
+                  placeholder="Digite seu usuário"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (error) setError(null);
+                  }}
                   autoComplete="username"
                   required
                 />
               </div>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="auth-password" className="form-label">
+            {/* Campo: Senha */}
+            <div className="fako-field-group">
+              <label htmlFor="fako-input-password" className="fako-field-label">
                 Senha
               </label>
-              <div className="input-wrapper">
-                <span className="input-icon" aria-hidden="true">🔒</span>
+              <div className="fako-input-container">
+                <span className="input-icon-slot" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
                 <input
-                  id="auth-password"
-                  type="password"
-                  className="form-input"
-                  placeholder="Sua senha secreta"
+                  id="fako-input-password"
+                  type={showPassword ? "text" : "password"}
+                  className="fako-input-element"
+                  placeholder="Digite sua senha"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  autoComplete={tab === "login" ? "current-password" : "new-password"}
                   required
                 />
+                <button
+                  type="button"
+                  className="fako-password-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Ocultar senha" : "Exibir senha em texto claro"}
+                >
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
               </div>
             </div>
 
+            {/* Linha Auxiliar: Lembrar de mim e Esqueceu sua senha? */}
+            <div className="fako-form-options-row">
+              <label className="fako-checkbox-control">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="fako-checkbox-input"
+                />
+                <span className="fako-checkbox-custom" aria-hidden="true" />
+                <span className="fako-checkbox-text">Lembrar de mim</span>
+              </label>
+
+              <button
+                type="button"
+                className="fako-forgot-password-link"
+                onClick={handleForgotPassword}
+              >
+                Esqueceu sua senha?
+              </button>
+            </div>
+
+            {/* Botão Primário: Entrar (Elemento visualmente mais importante) */}
             <button
               type="submit"
-              className="action-button auth-submit-btn"
+              className="fako-primary-cta-btn"
               disabled={isLoading}
             >
               {isLoading ? (
-                "Carregando..."
-              ) : mode === "login" ? (
-                "Entrar no FAKO ➔"
+                <span className="fako-btn-spinner-wrap">
+                  <span className="fako-btn-spinner" aria-hidden="true" />
+                  <span>Carregando...</span>
+                </span>
+              ) : tab === "login" ? (
+                "Entrar"
               ) : (
-                "Criar Conta e Começar 🚀"
+                "Criar conta"
               )}
             </button>
           </form>
 
-          {/* Alternância de Modo */}
-          <div className="auth-footer-prompt">
-            {mode === "login" ? (
-              <p>
-                Ainda não tem conta?{" "}
-                <button
-                  type="button"
-                  className="auth-link-button"
-                  onClick={() => handleToggleMode("register")}
-                >
-                  Criar conta grátis
-                </button>
-              </p>
-            ) : (
-              <p>
-                Já possui uma conta?{" "}
-                <button
-                  type="button"
-                  className="auth-link-button"
-                  onClick={() => handleToggleMode("login")}
-                >
-                  Fazer login
-                </button>
-              </p>
-            )}
+          {/* Divisor "ou" */}
+          <div className="fako-auth-divider" aria-hidden="true">
+            <span className="divider-line" />
+            <span className="divider-label">ou</span>
+            <span className="divider-line" />
           </div>
-        </div>
+
+          {/* Link Secundário: Continuar como visitante */}
+          <div className="fako-guest-action-block">
+            <button
+              type="button"
+              className="fako-guest-link"
+              onClick={handleGuestLogin}
+              disabled={isLoading}
+            >
+              <span>Continuar como visitante</span>
+              <span className="guest-arrow" aria-hidden="true">→</span>
+            </button>
+          </div>
+
+          {/* Componente Expansível: Como funciona? */}
+          <div className="fako-accordion-module">
+            <button
+              type="button"
+              className="fako-accordion-trigger"
+              onClick={() => setIsAccordionOpen(!isAccordionOpen)}
+              aria-expanded={isAccordionOpen}
+              aria-controls="fako-accordion-explanation"
+            >
+              <span className="fako-accordion-label-group">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="fako-info-icon"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                <span className="accordion-heading-text">Como funciona?</span>
+              </span>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`fako-chevron-icon ${isAccordionOpen ? "expanded" : ""}`}
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            <div
+              id="fako-accordion-explanation"
+              className={`fako-accordion-content ${isAccordionOpen ? "open" : ""}`}
+              role="region"
+              aria-hidden={!isAccordionOpen}
+            >
+              <div className="fako-accordion-inner">
+                <p>
+                  O FAKO utiliza inteligência artificial para analisar padrões presentes nas notícias.
+                  O resultado é uma estimativa de confiabilidade, e não uma confirmação da veracidade da informação.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 };

@@ -17,18 +17,19 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   onConfirm,
   onResume,
 }) => {
+  const QUESTION_DURATION = 45;
   const [guess, setGuess] = useState<number>(50);
-  const [timeLeft, setTimeLeft] = useState<number>(15);
+  const [timeLeft, setTimeLeft] = useState<number>(QUESTION_DURATION);
   const timerRef = useRef<number | null>(null);
-  const lastSecondRef = useRef<number>(15);
+  const lastSecondRef = useRef<number>(QUESTION_DURATION);
 
   // Reiniciar estado da pergunta
   useEffect(() => {
     setGuess(50);
-    setTimeLeft(15);
-    lastSecondRef.current = 15;
+    setTimeLeft(QUESTION_DURATION);
+    lastSecondRef.current = QUESTION_DURATION;
 
-    const deadline = Date.now() + 15000;
+    const deadline = Date.now() + QUESTION_DURATION * 1000;
 
     timerRef.current = window.setInterval(() => {
       const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));

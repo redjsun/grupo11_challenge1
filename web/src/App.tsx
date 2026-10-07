@@ -9,6 +9,7 @@ import {
   AppScreen,
   User,
   UserStats,
+  CategoryFilter,
 } from "./types";
 import { nextQuestion, resetQuestionDeck } from "./services/questionService";
 import { soundEffects } from "./services/audioService";
@@ -20,6 +21,7 @@ import { DpadControls } from "./components/DpadControls";
 import { OverlayScreen } from "./components/OverlayScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { HomeScreen } from "./components/HomeScreen";
+import { CategoriesScreen } from "./components/CategoriesScreen";
 import { TutorialScreen } from "./components/TutorialScreen";
 import { JourneyScreen } from "./components/JourneyScreen";
 
@@ -52,9 +54,18 @@ export default function App() {
           gamesPlayed: 0,
           totalAcertos: 0,
           totalErros: 0,
+          streakDays: 1,
           hasSeenTutorial: false,
+          categoryStats: {
+            saude: { acertos: 0, total: 0 },
+            tecnologia: { acertos: 0, total: 0 },
+            gerais: { acertos: 0, total: 0 },
+          },
+          achievements: [],
         };
   });
+
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("Misto");
 
   // Estado do Jogo (Snake)
   const [status, setStatus] = useState<GameStatus>("START");
@@ -79,9 +90,17 @@ export default function App() {
   const [isQuestionAnswered, setIsQuestionAnswered] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<QuestionResult | null>(null);
 
-  // Configurações Globais
+  // Configurações Globais (Apenas Claro e Escuro)
   const [isMuted, setIsMuted] = useState<boolean>(soundEffects.getMuted());
-  const [theme, setTheme] = useState<"auto" | "light" | "dark">("auto");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      const saved = localStorage.getItem("fako_theme");
+      if (saved === "dark" || saved === "light") return saved;
+    } catch {
+      // fallback
+    }
+    return "light";
+  });
 
   // Referências mutáveis para loop de jogo
   const nextDirRef = useRef<Direction>("RIGHT");
@@ -119,13 +138,14 @@ export default function App() {
     applesInLevelRef.current = applesInLevel;
   }, [applesInLevel]);
 
-  // Aplicar tema no elemento raiz
+  // Aplicar tema no elemento raiz (sempre "light" ou "dark")
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "auto") {
-      root.removeAttribute("data-theme");
-    } else {
-      root.setAttribute("data-theme", theme);
+    root.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("fako_theme", theme);
+    } catch {
+      // Ignora erro de localStorage
     }
   }, [theme]);
 
@@ -207,7 +227,6 @@ export default function App() {
       soundEffects.playGameOver();
       setStatus("GAMEOVER");
 
-      // Salva estatísticas localmente
       if (currentUser) {
         authService.recordGameFinished(currentUser.username, {
           score,
@@ -216,6 +235,7 @@ export default function App() {
           totalApples,
           acertos,
           erros,
+          category: selectedCategory,
         });
         refreshUserStats();
       }
@@ -239,7 +259,7 @@ export default function App() {
       soundEffects.playEat();
       setStatus("QUESTION");
 
-      const question = nextQuestion();
+      const question = nextQuestion(selectedCategory);
       setCurrentQuestion(question);
       setIsQuestionAnswered(false);
       setLastResult(null);
@@ -247,7 +267,7 @@ export default function App() {
       const nextApplePos = placeRandomApple(newSnake);
       setApple(nextApplePos);
     }
-  }, [placeRandomApple, currentUser, score, level, applesInLevel, totalApples, acertos, erros, refreshUserStats]);
+  }, [placeRandomApple, currentUser, score, level, applesInLevel, totalApples, acertos, erros, selectedCategory, refreshUserStats]);
 
   // Loop de Jogo
   useEffect(() => {
@@ -270,8 +290,8 @@ export default function App() {
   }, [currentScreen, status, level, step, getSpeed]);
 
   // Iniciar Novo Jogo
-  const startGame = useCallback(() => {
-    resetQuestionDeck();
+  const startGame = useCallback((cat: CategoryFilter = "Misto") => {
+    resetQuestionDeck(cat);
     growPendingRef.current = 0;
     const initialSnake: Position[] = [
       { x: 8, y: 8 },
@@ -316,14 +336,14 @@ export default function App() {
       } else if (statusRef.current === "START" || statusRef.current === "GAMEOVER" || statusRef.current === "VICTORY") {
         if (key === "Enter" || key === " ") {
           e.preventDefault();
-          startGame();
+          startGame(selectedCategory);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentScreen, changeDirection, startGame]);
+  }, [currentScreen, changeDirection, startGame, selectedCategory]);
 
   // Confirmação de Resposta
   const handleConfirmQuestion = (guess: number) => {
@@ -337,6 +357,11 @@ export default function App() {
       pointsAwarded = distance === 0 ? 120 : 100;
       soundEffects.playCorrect();
       setAcertos((prev) => prev + 1);
+
+      if (distance === 0 && currentUser) {
+        authService.recordBullseye(currentUser.username);
+        refreshUserStats();
+      }
     } else {
       pointsAwarded = 0;
       growPendingRef.current += 1;
@@ -380,6 +405,7 @@ export default function App() {
             totalApples: nextTotalApples,
             acertos,
             erros,
+            category: selectedCategory,
           });
           refreshUserStats();
         }
@@ -398,13 +424,12 @@ export default function App() {
     setStatus("PLAYING");
   };
 
-  // NAVEGAÇÃO DE TELAS
+  // NAVEGAÇÃO DE ROTAS
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     const stats = authService.getUserStats(user.username);
     setUserStats(stats);
 
-    // Se for primeira vez (nunca viu tutorial), direciona automaticamente
     if (!stats.hasSeenTutorial) {
       setCurrentScreen("tutorial");
     } else {
@@ -418,17 +443,18 @@ export default function App() {
     setCurrentScreen("login");
   };
 
-  const handlePlayFromHome = () => {
+  const handlePlayFromHome = (cat: CategoryFilter = "Misto") => {
     if (!currentUser) {
       setCurrentScreen("login");
       return;
     }
     const hasSeen = authService.hasSeenTutorial(currentUser.username);
+    setSelectedCategory(cat);
     if (!hasSeen) {
       setCurrentScreen("tutorial");
     } else {
       setCurrentScreen("game");
-      startGame();
+      startGame(cat);
     }
   };
 
@@ -438,7 +464,7 @@ export default function App() {
       refreshUserStats();
     }
     setCurrentScreen("game");
-    startGame();
+    startGame(selectedCategory);
   };
 
   const handleTutorialSkip = () => {
@@ -447,7 +473,7 @@ export default function App() {
       refreshUserStats();
     }
     setCurrentScreen("game");
-    startGame();
+    startGame(selectedCategory);
   };
 
   const handleGoHome = () => {
@@ -466,7 +492,7 @@ export default function App() {
   };
 
   const handleToggleTheme = () => {
-    setTheme((prev) => (prev === "auto" ? "dark" : prev === "dark" ? "light" : "auto"));
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
   const gameStats: GameStats = {
@@ -476,21 +502,31 @@ export default function App() {
     totalApples,
     acertos,
     erros,
+    category: selectedCategory,
   };
 
+  const totalAnswered = acertos + erros;
+  const currentAccuracy = totalAnswered > 0 ? Math.round((acertos / totalAnswered) * 100) : 100;
+
   return (
-    <div className="fako-app">
+    <div className={`fako-app screen-${currentScreen}`}>
       {/* 1. TELA DE LOGIN / CADASTRO */}
       {currentScreen === "login" && (
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+        <LoginScreen
+          onLoginSuccess={handleLoginSuccess}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+        />
       )}
 
-      {/* 2. TELA INICIAL (DASHBOARD) */}
+      {/* 2. TELA INICIAL (DASHBOARD FIGMA) */}
       {currentScreen === "home" && currentUser && (
         <HomeScreen
           user={currentUser}
           stats={userStats}
-          onPlay={handlePlayFromHome}
+          onPlay={() => handlePlayFromHome("Misto")}
+          onSelectCategory={(cat) => handlePlayFromHome(cat)}
+          onCategories={() => setCurrentScreen("categories")}
           onTutorial={() => setCurrentScreen("tutorial")}
           onJourney={() => setCurrentScreen("journey")}
           onLogout={handleLogout}
@@ -501,7 +537,15 @@ export default function App() {
         />
       )}
 
-      {/* 3. TELA DE TUTORIAL */}
+      {/* 3. TELA DE CATEGORIAS (NOVA DO FIGMA) */}
+      {currentScreen === "categories" && (
+        <CategoriesScreen
+          onSelectCategory={(cat) => handlePlayFromHome(cat)}
+          onBack={() => setCurrentScreen("home")}
+        />
+      )}
+
+      {/* 4. TELA DE TUTORIAL */}
       {currentScreen === "tutorial" && (
         <TutorialScreen
           onComplete={handleTutorialComplete}
@@ -509,68 +553,154 @@ export default function App() {
         />
       )}
 
-      {/* 4. TELA MINHA JORNADA */}
+      {/* 5. TELA MINHA JORNADA */}
       {currentScreen === "journey" && currentUser && (
         <JourneyScreen
           user={currentUser}
           stats={userStats}
           onBack={() => setCurrentScreen("home")}
-          onPlay={handlePlayFromHome}
+          onPlay={() => handlePlayFromHome("Misto")}
         />
       )}
 
-      {/* 5. TELA DO JOGO (SNAKE) */}
+      {/* 6. TELA DO JOGO (SNAKE COM LAYOUT EXPANDIDO FIGMA SCREEN 4) */}
       {currentScreen === "game" && (
-        <main className="game-container">
-          <Header
-            score={score}
-            level={level}
-            applesInLevel={applesInLevel}
-            maxApplesPerLevel={APPLES_PER_LEVEL}
-            maxLevels={MAX_LEVELS}
-            isMuted={isMuted}
-            onToggleMute={handleToggleMute}
-            theme={theme}
-            onToggleTheme={handleToggleTheme}
-            onGoHome={handleGoHome}
-            username={currentUser?.username}
-          />
-
-          <div className="board-interactive-area">
-            <GameBoard
-              gridSize={GRID_SIZE}
-              snake={snake}
-              direction={direction}
-              apple={apple}
-              onSwipe={changeDirection}
-            />
-
-            {/* Modal / Balão da Pergunta */}
-            {status === "QUESTION" && currentQuestion && (
-              <QuestionModal
-                question={currentQuestion}
-                isAnswered={isQuestionAnswered}
-                result={lastResult}
-                onConfirm={handleConfirmQuestion}
-                onResume={handleResumeGame}
-              />
-            )}
-
-            {/* Telas de Início, Fim de Jogo e Vitória */}
-            <OverlayScreen
-              status={status}
-              stats={gameStats}
-              onStart={startGame}
-              onRestart={startGame}
+        <main className="game-screen-wrapper">
+          {/* Header Mobile / Topo */}
+          <div className="game-top-bar-mobile">
+            <Header
+              score={score}
+              level={level}
+              applesInLevel={applesInLevel}
+              maxApplesPerLevel={APPLES_PER_LEVEL}
+              maxLevels={MAX_LEVELS}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+              theme={theme}
+              onToggleTheme={handleToggleTheme}
               onGoHome={handleGoHome}
+              username={currentUser?.username}
             />
           </div>
 
-          {/* Controles Virtuais */}
-          <DpadControls
-            onDirectionChange={changeDirection}
-            disabled={status !== "PLAYING"}
-          />
+          <div className="game-expanded-layout">
+            {/* Coluna Esquerda: Telemetria e Vidas (Figma Screen 4) */}
+            <aside className="game-side-panel left-panel">
+              <div className="side-card main-stats-card">
+                <span className="side-card-badge">🍏 Partida FAKO</span>
+                <div className="side-stat-row">
+                  <span className="side-stat-label">Pontos</span>
+                  <span className="side-stat-val text-accent">{score}</span>
+                </div>
+                <div className="side-stat-row">
+                  <span className="side-stat-label">Nível</span>
+                  <span className="side-stat-val">{level} <small>/ {MAX_LEVELS}</small></span>
+                </div>
+                <div className="side-progress-box">
+                  <div className="side-progress-header">
+                    <span>Maçãs no Nível</span>
+                    <span>{applesInLevel}/{APPLES_PER_LEVEL}</span>
+                  </div>
+                  <div className="side-progress-track">
+                    <div
+                      className="side-progress-fill"
+                      style={{ width: `${(applesInLevel / APPLES_PER_LEVEL) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="side-card snake-status-card">
+                <h4 className="side-card-title">🐍 Status da Cobra</h4>
+                <div className="side-metric-item">
+                  <span className="metric-name">Comprimento</span>
+                  <span className="metric-val">{snake.length} blocos</span>
+                </div>
+                <div className="side-metric-item">
+                  <span className="metric-name">Crescimento no erro</span>
+                  <span className="metric-val text-danger">+{erros}</span>
+                </div>
+              </div>
+            </aside>
+
+            {/* Coluna Central: O Tabuleiro 16x16 */}
+            <section className="game-center-board">
+              <div className="board-interactive-area">
+                <GameBoard
+                  gridSize={GRID_SIZE}
+                  snake={snake}
+                  direction={direction}
+                  apple={apple}
+                  onSwipe={changeDirection}
+                />
+
+                {/* Modal / Balão da Pergunta */}
+                {status === "QUESTION" && currentQuestion && (
+                  <QuestionModal
+                    question={currentQuestion}
+                    isAnswered={isQuestionAnswered}
+                    result={lastResult}
+                    onConfirm={handleConfirmQuestion}
+                    onResume={handleResumeGame}
+                  />
+                )}
+
+                {/* Telas de Início, Fim de Jogo e Vitória */}
+                <OverlayScreen
+                  status={status}
+                  stats={gameStats}
+                  onStart={() => startGame(selectedCategory)}
+                  onRestart={() => startGame(selectedCategory)}
+                  onGoHome={handleGoHome}
+                />
+              </div>
+
+              {/* Controles Virtuais D-pad */}
+              <DpadControls
+                onDirectionChange={changeDirection}
+                disabled={status !== "PLAYING"}
+              />
+            </section>
+
+            {/* Coluna Direita: Análise Crítica e Controles Rápidos (Figma Screen 4) */}
+            <aside className="game-side-panel right-panel">
+              <div className="side-card session-category-card">
+                <span className="side-card-badge">Área Temática</span>
+                <h4 className="category-active-title">
+                  {selectedCategory === "Misto" ? "🎲 Modo Desafio Misto" : selectedCategory}
+                </h4>
+                <p className="category-active-desc">
+                  Afirmações reais checadas com base na literatura científica e institucional.
+                </p>
+              </div>
+
+              <div className="side-card accuracy-card">
+                <h4 className="side-card-title">🎯 Precisão da Rodada</h4>
+                <div className="accuracy-big-number">{currentAccuracy}%</div>
+                <div className="side-counts-row">
+                  <span className="count-hit">✅ {acertos} acertos</span>
+                  <span className="count-miss">❌ {erros} erros</span>
+                </div>
+              </div>
+
+              <div className="side-card quick-nav-card">
+                <button
+                  type="button"
+                  className="secondary-button side-nav-btn"
+                  onClick={handleGoHome}
+                >
+                  🏠 Voltar ao Hub
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button side-nav-btn"
+                  onClick={() => setCurrentScreen("tutorial")}
+                >
+                  📖 Ver Regras
+                </button>
+              </div>
+            </aside>
+          </div>
         </main>
       )}
     </div>

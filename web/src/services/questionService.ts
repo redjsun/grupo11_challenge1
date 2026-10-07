@@ -1,4 +1,4 @@
-import { Question } from "../types";
+import { Question, CategoryFilter } from "../types";
 
 /**
  * Banco de perguntas do FAKO (15 afirmações curadas).
@@ -130,56 +130,52 @@ export const QUESTIONS_DB: Question[] = [
 
 class QuestionDeckManager {
   private deck: Question[] = [];
-  private history: string[] = [];
+  private currentFilter: CategoryFilter = "Misto";
 
   constructor() {
     this.refillDeck();
   }
 
-  private refillDeck() {
-    // Embaralha uma cópia do banco para não haver perguntas repetidas na mesma rodada
-    this.deck = [...QUESTIONS_DB].sort(() => Math.random() - 0.5);
+  public refillDeck(filter: CategoryFilter = "Misto") {
+    this.currentFilter = filter;
+    let pool = [...QUESTIONS_DB];
+    if (filter !== "Misto") {
+      pool = pool.filter((q) => q.categoria === filter);
+    }
+    // Embaralha o pool
+    this.deck = pool.sort(() => Math.random() - 0.5);
   }
 
   /**
    * Retorna a próxima pergunta do baralho.
-   * Isolada para permitir futura substituição por chamada assíncrona de API/banco de dados.
    */
-  public nextQuestion(): Question {
+  public nextQuestion(filter?: CategoryFilter): Question {
+    if (filter && filter !== this.currentFilter) {
+      this.refillDeck(filter);
+    }
+
     if (this.deck.length === 0) {
-      this.refillDeck();
+      this.refillDeck(this.currentFilter);
     }
-    const q = this.deck.pop() || QUESTIONS_DB[0];
-    if (q.id) {
-      this.history.push(q.id);
-    }
-    return q;
+
+    const q = this.deck.pop();
+    if (q) return q;
+
+    // Fallback
+    return QUESTIONS_DB[0];
   }
 
-  /**
-   * Versão assíncrona caso o consumidor queira utilizar como interface pronta para API remota.
-   */
-  public async nextQuestionAsync(): Promise<Question> {
-    return this.nextQuestion();
-  }
-
-  public reset() {
-    this.history = [];
-    this.refillDeck();
+  public reset(filter: CategoryFilter = "Misto") {
+    this.refillDeck(filter);
   }
 }
 
-// Instância singleton do gerenciador de perguntas
 const questionManager = new QuestionDeckManager();
 
-/**
- * Função isolada de obtenção da próxima pergunta.
- * No futuro, pode ser adaptada para buscar de `fetch('/api/questions/next')`.
- */
-export function nextQuestion(): Question {
-  return questionManager.nextQuestion();
+export function nextQuestion(filter?: CategoryFilter): Question {
+  return questionManager.nextQuestion(filter);
 }
 
-export function resetQuestionDeck(): void {
-  questionManager.reset();
+export function resetQuestionDeck(filter: CategoryFilter = "Misto"): void {
+  questionManager.reset(filter);
 }
