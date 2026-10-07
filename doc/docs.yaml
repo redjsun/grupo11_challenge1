@@ -18,3 +18,7 @@ docs:
     titulo: Guia de classificação e anotação
     arquivo: doc/guia-classificacao.md
     descricao: Rótulos do framework de desordem informacional, arquitetura planejada do classificador, divisão dos dados e guia de anotação da equipe.
+  - id: padronizacao
+    titulo: Padronização do texto curto pela LLM
+    arquivo: doc/padronizacao.md
+    descricao: Lote e cache da extração de afirmações no treino (issue #20), regra para várias afirmações ou nenhuma e validação pelo teste de atalho.

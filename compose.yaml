@@ -52,11 +52,18 @@ services:
     build: ./notebooks
     container_name: fakenews-eda
     profiles: ["eda"]
+    env_file:
+      - path: .env
+        required: false
+    # Para alcançar uma LLM local no host (Ollama) também no Linux.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8888:8888"
     volumes:
       - ./notebooks:/work/notebooks
       - ./scripts:/work/scripts
+      - ./ml:/work/ml
       - ./data:/work/data
 
 volumes:
