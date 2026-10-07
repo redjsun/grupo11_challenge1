@@ -9,8 +9,10 @@ Cada linha do JSONL é uma notícia com os campos:
 
 - `base`: de onde vem o rótulo (fakebr, fakerecogna, faketrue, factcheck, fakenewsbr,
   verdadeiras). Os boatos do Boatos.org entram só como a parte falsa do FakeRecogna.
-- `origem_rotulo`: por que o rótulo é confiável (agencia, curadoria, portal, mensagem ou
-  equipe), para pesar os exemplos no treino (ver ORIGEM_ROTULO_PESO).
+- `origem_rotulo`: por que o rótulo é confiável (agencia, curadoria, portal,
+  portal_verificado, mensagem ou equipe), para pesar os exemplos no treino (ver
+  ORIGEM_ROTULO_PESO). `portal_verificado`: matéria de portal que passou nos filtros e na
+  auditoria (#6, ver verificar_portais).
 - `tipo` e `sinais`: só nos itens anotados pela equipe (pesquisa/anotacoes/consolidado.csv,
   ver aplicar_anotacoes); nos demais, null.
 - `veracidade`: falso, enganoso ou verdadeiro. `rotulo` é a versão binária (fake ou true)
@@ -265,6 +267,79 @@ def aplicar_anotacoes(registros: list[dict], caminho: Path = ANOTACOES) -> int:
             registro["split"] = registro["split_produto"] = "fora"
         aplicados += 1
     return aplicados
+
+
+# Dataset de verdadeiros confiáveis (#6, doc/dataset-verdadeiras.md): matérias de portal que
+# passam nos filtros, de veículos aprovados na auditoria manual, viram `portal_verificado`.
+VEICULOS_VERIFICADOS = RAIZ / "anotacoes" / "veiculos-verificados.csv"
+AUDITORIA_VERDADEIRAS = RAIZ / "anotacoes" / "auditoria-verdadeiras.csv"
+# Seções que não são notícia factual: opinião, vídeo, ao vivo, publicidade, entrevista.
+SECOES_FORA = re.compile(
+    r"/(opiniao|colunas?|colunistas?|blogs?|videos?|ao-vivo|podcasts?|publieditorial|"
+    r"patrocinado|conteudo-patrocinado|especial-publicitario|editorial|artigos?|analise|"
+    r"entrevistas?|charges?)/"
+)
+TITULO_FORA = re.compile(r"^\s*(ao vivo|opinião|análise|artigo|editorial|entrevista)\b", re.I)
+# Matéria que relata a fala de alguém: a matéria pode estar certa e a afirmação, falsa.
+RELATA_FALA = re.compile(
+    r"\b(diz|dizem|disse|afirma|afirmam|afirmou|declara|declarou|alega|alegou|garante|"
+    r"defende|nega|negou|critica|acusa|acusou|admite|avalia|aponta|cobra|promete|"
+    r"prometeu|ataca|rebate|sugere|insinua|classifica)\b"
+    r"|(^|[,;:]\s*)segundo\b",  # "Segundo a PF, ...", mas não "em segundo turno"
+    re.I,
+)
+ASPAS = re.compile(r"[\"“”«»]|‘[^’]+’|'[^']+'(?!\w)")
+
+
+def motivo_filtro_portal(registro: dict) -> str | None:
+    """Por que a matéria de portal não serve como verdadeiro confiável; None se passa."""
+    titulo = (registro.get("texto_curto") or "").strip()
+    if not titulo:
+        return "sem título"
+    url = (registro.get("url") or "").lower()
+    if SECOES_FORA.search(url) or "youtu" in url or TITULO_FORA.search(titulo):
+        return "opinião, vídeo, ao vivo ou publicidade"
+    if titulo.endswith("?"):
+        return "pergunta"
+    if RELATA_FALA.search(titulo) or ASPAS.search(titulo):
+        return "relata fala"
+    return None
+
+
+def verificar_portais(
+    registros: list[dict],
+    veiculos: Path = VEICULOS_VERIFICADOS,
+    auditoria: Path = AUDITORIA_VERDADEIRAS,
+) -> dict[str, int]:
+    """Marca `portal_verificado` nas matérias que passam nos filtros, de veículo aprovado.
+
+    Os veículos aprovados vêm de auditar_verdadeiras.py (`aceito=1`); sem esse arquivo,
+    nenhuma matéria vira verificada. Itens que a auditoria achou com problema ficam `portal`.
+    """
+    if not veiculos.exists():
+        return {}
+    with open(veiculos, encoding="utf-8", newline="") as entrada:
+        aprovados = {linha["fonte"] for linha in csv.DictReader(entrada) if linha["aceito"] == "1"}
+    com_problema = set()
+    if auditoria.exists():
+        with open(auditoria, encoding="utf-8", newline="") as entrada:
+            com_problema = {
+                linha["id"] for linha in csv.DictReader(entrada) if linha["problema"] != "nenhum"
+            }
+    motivos: dict[str, int] = {}
+    for registro in registros:
+        if registro["origem_rotulo"] != "portal" or registro["base"] != "verdadeiras":
+            continue
+        motivo = motivo_filtro_portal(registro)
+        if motivo is None and registro["fonte"] not in aprovados:
+            motivo = "veículo não aprovado"
+        if motivo is None and registro["id"] in com_problema:
+            motivo = "problema na auditoria"
+        if motivo is None:
+            registro["origem_rotulo"] = "portal_verificado"
+            motivo = "verificado"
+        motivos[motivo] = motivos.get(motivo, 0) + 1
+    return motivos
 
 
 def definir_split(base: str, grupo: str) -> str:
@@ -655,6 +730,8 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
        abaixo dos falsos; os pesos por classe no treino compensam.
     4. Validação e teste: todos os enganosos e os verdadeiros; falsos até
        PROPORCAO_AVALIACAO vezes os enganosos.
+    5. Portais verificados (#6): completam os verdadeiros de cada split até o número de
+       falsos; o que passa disso vira reserva.
     A amostra é determinística (ordem pelo hash do id), para o dataset ser reproduzível. O
     hash leva um prefixo próprio: sem ele, a ordem repetiria o sorteio do split (no
     FakeRecogna o grupo é o próprio id), e os registros de validação e teste, que têm hash
@@ -701,6 +778,14 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
         if split != "treino":
             for r in falsos[int(PROPORCAO_AVALIACAO * len(enganosos)):]:
                 guardar(r, f"{split}: falso")
+            falsos = falsos[: int(PROPORCAO_AVALIACAO * len(enganosos))]
+        verificados = [r for r in do_split if r["origem_rotulo"] == "portal_verificado"]
+        outros_verdadeiros = sum(
+            r["veracidade"] == "verdadeiro" and r["origem_rotulo"] != "portal_verificado"
+            for r in do_split
+        )
+        for r in verificados[max(len(falsos) - outros_verdadeiros, 0):]:
+            guardar(r, f"{split}: portal verificado além dos falsos")
     return reserva
 
 
@@ -732,6 +817,7 @@ def main():
             registro["split_produto"] = definir_split_produto(registro)
             registro["tipo"] = registro["sinais"] = None
             registros.append(registro)
+    portais = verificar_portais(registros)
     anotados = aplicar_anotacoes(registros)
     removidos = remover_vazamento(registros)
     reserva = equilibrar(registros)
@@ -749,6 +835,7 @@ def main():
         for (prot, split, veracidade), n in sorted(contagem.items()):
             if prot == protocolo:
                 print(f"  {split:15} {veracidade:10} {n:6} {com_curto.get((prot, split, veracidade), 0):6}")
+    print("matérias de portal (portal_verificado, ou o motivo de ficar fora):", portais)
     print("anotados pela equipe (origem_rotulo=equipe):", anotados)
     print("repetidos descartados por base:", repetidos)
     print("quase-duplicatas de treino/validação tiradas dos splits posteriores:", removidos)

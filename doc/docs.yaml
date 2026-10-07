@@ -22,3 +22,7 @@ docs:
     titulo: Padronização do texto curto pela LLM
     arquivo: doc/padronizacao.md
     descricao: Lote e cache da extração de afirmações no treino (issue #20), regra para várias afirmações ou nenhuma e validação pelo teste de atalho.
+  - id: dataset-verdadeiras
+    titulo: Dataset de verdadeiros confiáveis
+    arquivo: doc/dataset-verdadeiras.md
+    descricao: Critérios de verdadeiro confiável (issue #6), filtros das matérias de portal, auditoria manual com medição do ruído e origem portal_verificado.
