@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados padronizar test-ml eda clean
+.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados padronizar atalho test-ml eda clean
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -64,6 +64,9 @@ PROMPT ?= api/app/prompts/extrair_afirmacoes_v1.txt
 
 padronizar: ## Padroniza o texto curto com a LLM (uso: make padronizar [PROMPT=api/app/prompts/extrair_afirmacoes_vN.txt] [ARGS="--limite 50"])
 	$(COMPOSE) --profile eda run --rm --no-deps eda python ml/padronizar.py --prompt $(PROMPT) $(ARGS)
+
+atalho: ## Teste de atalho: AUC só pela forma do texto (uso: make atalho [ARGS="--prompt api/app/prompts/extrair_afirmacoes_v1.txt"])
+	$(COMPOSE) --profile eda run --rm --no-deps eda python ml/atalho.py $(ARGS)
 
 test-ml: ## Roda lint e testes de ml/
 	$(COMPOSE) --profile eda run --rm --no-deps -w /work/ml eda sh -c "pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && pytest -v"

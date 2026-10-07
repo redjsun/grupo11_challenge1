@@ -11,3 +11,6 @@ dist/
 # Dados brutos e processados: gerados por scripts/baixar_dados.sh e scripts/preparar_dados.py
 data/
 .ipynb_checkpoints/
+
+# Saídas dos diagnósticos de ml/ (atalho.json etc.), geradas a cada rodada
+ml/saidas/

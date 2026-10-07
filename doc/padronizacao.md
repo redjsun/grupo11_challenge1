@@ -61,7 +61,8 @@ mudar a regra (usar todas as afirmações, por exemplo) não exige chamar a LLM 
 1. Treinar os modelos de referência nas duas versões, `texto_curto` original e
    `texto_padronizado`, com os mesmos splits.
 2. Comparar F1 macro na validação, no conjunto todo e na fatia "só checados".
-3. Rodar o teste de atalho nas duas versões: o AUC deve **cair** na padronizada.
+3. Rodar o teste de atalho nas duas versões (`make atalho ARGS="--prompt ..."`): o AUC
+   deve **cair** na padronizada, comparada ao original nos mesmos registros.
 4. Registrar aqui as duas tabelas e o tempo e custo do lote (de `*.rodadas.jsonl`).
 
 | Versão | F1 validação | F1 só checados | AUC atalho validação | AUC atalho teste |
