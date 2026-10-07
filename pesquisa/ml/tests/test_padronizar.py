@@ -1,10 +1,12 @@
 import json
 import threading
+import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 from padronizar import (
+    ESQUEMA_AFIRMACOES,
     Extracao,
     Prompt,
     aplicar,
@@ -112,7 +114,7 @@ def test_padronizar_extrai_do_texto_longo_quando_falta_o_curto(tmp_path, prompt)
     assert relatorio.processados == 2
     assert relatorio.sem_texto == 1
     assert relatorio.tokens_entrada == 20
-    assert set(ler_cache(cache, prompt)) == {"a", "b"}
+    assert set(ler_cache(cache, prompt, "")) == {"a", "b"}
 
 
 def test_segunda_rodada_nao_chama_a_llm_para_o_que_esta_em_cache(tmp_path, prompt):
@@ -141,7 +143,7 @@ def test_falha_da_llm_nao_entra_no_cache_e_e_refeita(tmp_path, prompt):
     cache = tmp_path / "padronizado_v1.jsonl"
     relatorio = padronizar(REGISTROS, prompt, quebrado, cache, log=silencioso)
     assert relatorio.falhas == 2
-    assert ler_cache(cache, prompt) == {}
+    assert ler_cache(cache, prompt, "") == {}
     extrator = ExtratorContador()
     padronizar(REGISTROS, prompt, extrator, cache, log=silencioso)
     assert len(extrator.chamadas) == 2
@@ -165,44 +167,115 @@ def test_aplicar_usa_a_primeira_afirmacao_e_marca_a_quantidade(tmp_path, prompt)
     }
     cache = tmp_path / "padronizado_v1.jsonl"
     padronizar(REGISTROS, prompt, ExtratorContador(respostas), cache, log=silencioso)
-    a, b, c = aplicar(REGISTROS, ler_cache(cache, prompt))
+    a, b, c = aplicar(REGISTROS, ler_cache(cache, prompt, ""))
     assert (a["texto_padronizado"], a["n_afirmacoes"]) == ("Vacina causa autismo", 2)
     assert (b["texto_padronizado"], b["n_afirmacoes"]) == (None, 0)
     assert (c["texto_padronizado"], c["n_afirmacoes"]) == (None, None)
     assert a["texto_curto"] == "Vacina causa autismo"  # o original continua no registro
 
 
-def test_extrator_openai_envia_o_prompt_preenchido_e_le_o_uso(prompt):
-    recebido = {}
+def test_trocar_o_modelo_refaz_o_cache(tmp_path, prompt):
+    cache = tmp_path / "padronizado_v1.jsonl"
+    padronizar(REGISTROS, prompt, ExtratorContador(), cache, modelo="qwen-a", log=silencioso)
+    extrator = ExtratorContador()
+    padronizar(REGISTROS, prompt, extrator, cache, modelo="qwen-b", log=silencioso)
+    assert len(extrator.chamadas) == 2
+    assert set(ler_cache(cache, prompt, "qwen-a")) == set(ler_cache(cache, prompt, "qwen-b"))
+    assert {json.loads(linha)["modelo"] for linha in cache.read_text().splitlines()} == {
+        "qwen-a",
+        "qwen-b",
+    }
+
+
+RESPOSTA_OK = {
+    "choices": [{"message": {"content": '{"afirmacoes": [{"texto": "Y", "quem_disse": "X"}]}'}}],
+    "usage": {"prompt_tokens": 42, "completion_tokens": 7},
+}
+
+
+def servidor_falso(respostas: list[tuple[int, dict]]):
+    """Servidor local que responde, em ordem, com (status, corpo) e guarda os pedidos."""
+    pedidos = []
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            recebido["caminho"] = self.path
-            recebido["auth"] = self.headers.get("Authorization")
-            recebido["corpo"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            resposta = {
-                "choices": [
-                    {"message": {"content": '{"afirmacoes": [{"texto": "Y", "quem_disse": "X"}]}'}}
-                ],
-                "usage": {"prompt_tokens": 42, "completion_tokens": 7},
-            }
-            self.send_response(200)
+            pedidos.append(
+                {
+                    "caminho": self.path,
+                    "auth": self.headers.get("Authorization"),
+                    "corpo": json.loads(self.rfile.read(int(self.headers["Content-Length"]))),
+                }
+            )
+            status, corpo = respostas[len(pedidos) - 1]
+            self.send_response(status)
             self.end_headers()
-            self.wfile.write(json.dumps(resposta).encode())
+            self.wfile.write(json.dumps(corpo).encode())
 
         def log_message(self, *args):
             pass
 
     servidor = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=servidor.handle_request, daemon=True).start()
-    base_url = f"http://127.0.0.1:{servidor.server_port}/v1"
-    extracao = extrator_openai(prompt, base_url, "modelo-x", "chave")("texto do registro")
+
+    def atender():
+        for _ in respostas:
+            servidor.handle_request()
+
+    threading.Thread(target=atender, daemon=True).start()
+    return servidor, f"http://127.0.0.1:{servidor.server_port}/v1", pedidos
+
+
+def test_extrator_openai_envia_o_prompt_o_esquema_e_le_o_uso(prompt):
+    servidor, base_url, pedidos = servidor_falso([(200, RESPOSTA_OK)])
+    extracao = extrator_openai(prompt, base_url, "qwen-x", "chave")("texto do registro")
     servidor.server_close()
 
     assert extracao == Extracao([{"texto": "Y", "quem_disse": "X"}], 42, 7)
-    assert recebido["caminho"] == "/v1/chat/completions"
-    assert recebido["auth"] == "Bearer chave"
-    assert recebido["corpo"]["model"] == "modelo-x"
-    assert recebido["corpo"]["temperature"] == 0
-    conteudo = recebido["corpo"]["messages"][0]["content"]
-    assert conteudo == "Extraia as afirmações de: texto do registro"
+    (pedido,) = pedidos
+    assert pedido["caminho"] == "/v1/chat/completions"
+    assert pedido["auth"] == "Bearer chave"
+    corpo = pedido["corpo"]
+    assert corpo["model"] == "qwen-x"
+    assert corpo["temperature"] == 0
+    assert corpo["messages"][0]["content"] == "Extraia as afirmações de: texto do registro"
+    assert corpo["response_format"]["type"] == "json_schema"
+    assert corpo["response_format"]["json_schema"]["schema"] == ESQUEMA_AFIRMACOES
+
+
+def test_extrator_openai_sem_esquema_trunca_e_acrescenta_o_corpo_extra(prompt):
+    servidor, base_url, pedidos = servidor_falso([(200, RESPOSTA_OK)])
+    extra = {"enable_thinking": False}
+    extrair = extrator_openai(
+        prompt, base_url, "qwen-x", None, esquema=False, max_caracteres=5, extra=extra
+    )
+    extrair("texto muito longo")
+    servidor.server_close()
+
+    corpo = pedidos[0]["corpo"]
+    assert "response_format" not in corpo
+    assert corpo["enable_thinking"] is False
+    assert corpo["messages"][0]["content"] == "Extraia as afirmações de: texto"
+    assert pedidos[0]["auth"] is None
+
+
+def test_extrator_openai_tenta_de_novo_em_429_e_5xx(prompt):
+    servidor, base_url, pedidos = servidor_falso(
+        [(429, {"error": "limite"}), (503, {"error": "fora"}), (200, RESPOSTA_OK)]
+    )
+    esperas = []
+    extrair = extrator_openai(prompt, base_url, "qwen-x", None, dormir=esperas.append)
+    extracao = extrair("texto")
+    servidor.server_close()
+
+    assert len(pedidos) == 3
+    assert esperas == [2.0, 4.0]
+    assert extracao.afirmacoes == [{"texto": "Y", "quem_disse": "X"}]
+
+
+def test_extrator_openai_nao_insiste_em_erro_do_pedido(prompt):
+    servidor, base_url, pedidos = servidor_falso([(400, {"error": "pedido inválido"})])
+    esperas = []
+    extrair = extrator_openai(prompt, base_url, "qwen-x", None, dormir=esperas.append)
+    with pytest.raises(urllib.error.HTTPError):
+        extrair("texto")
+    servidor.server_close()
+    assert len(pedidos) == 1 and esperas == []

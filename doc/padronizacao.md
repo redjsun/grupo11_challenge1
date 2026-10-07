@@ -26,11 +26,21 @@ make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/
   marcador). A resposta segue o esquema da #19, `{"e_opiniao": ..., "afirmacoes":
   [{"texto": ..., "quem_disse": ...}]}`; lista vazia quer dizer opinião. O cache guarda o
   `quem_disse`, mas o treino usa só o `texto`, como o classificador em uso.
-- **LLM:** qualquer endpoint compatível com a API de chat da OpenAI, por `LLM_BASE_URL`,
-  `LLM_MODEL` e `LLM_API_KEY` no `.env`. Serve para a LLM local (Ollama, llama.cpp) e para
-  um provedor hospedado. Temperatura 0.
+- **LLM:** o **Qwen hospedado**, o mesmo da coleta diária de notícias: treino e uso precisam
+  do mesmo prompt **e** do mesmo modelo, senão o formato volta a divergir. Endpoint
+  compatível com a API de chat da OpenAI, por `LLM_BASE_URL`, `LLM_MODEL` (com a versão
+  fixa, porque provedores atualizam modelos sem aviso) e `LLM_API_KEY` no `.env`.
+  Temperatura 0; o pedido leva o JSON Schema da #19 em `response_format` (`--sem-esquema`
+  se o provedor não aceitar) e o texto truncado em `--max-caracteres` (padrão 16 mil, ~4 mil
+  tokens). `LLM_EXTRA_BODY` passa opções do provedor, como desligar o raciocínio do Qwen3.
+  Erros 429 e 5xx e falhas de rede ganham até 4 tentativas, com espera de 2, 4 e 8 s.
+- **Escolha do modelo:** 2 a 3 tamanhos de Qwen comparados nos 100 textos BR da #19
+  (opinião, checabilidade, `quem_disse`, % de JSON válido, tempo e custo por texto), antes do
+  lote. Os textos saem da máquina: só bases públicas e notícias, nunca dados de jogadores;
+  conferir nos termos do provedor que as entradas não são usadas para treino.
 - **Cache:** `pesquisa/data/processed/padronizado_<versao>.jsonl` (fora do Git), uma linha por `id`
-  com as afirmações, a versão e o hash do prompt. A versão vem do nome do arquivo. Rodar
+  com as afirmações, a versão, o hash do prompt e o modelo. Trocar o modelo também refaz as
+  linhas. A versão vem do nome do arquivo. Rodar
   de novo só processa os ids que faltam (nos retreinos, só as frases novas). Se o texto
   do prompt mudar sem trocar a versão, o hash não bate e as linhas antigas são refeitas.
   Cada linha é gravada ao ficar pronta: dá para interromper e retomar. Falhas da LLM

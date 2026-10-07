@@ -11,10 +11,10 @@ mesmo prompt do uso. Quem não tem `texto_curto` (Fake.br, verdadeiras do FakeTr
 maior parte das mensagens) é extraído do `texto`.
 
 Cache: pesquisa/data/processed/padronizado_<versao>.jsonl, uma linha por registro, com o `id`, as
-afirmações extraídas e o hash do prompt. A versão vem do nome do arquivo do prompt
-(extrair_afirmacoes_v1.txt -> v1). Rodar de novo só chama a LLM para os ids que faltam;
-se o texto do prompt mudar sem trocar a versão, as linhas antigas deixam de valer e são
-refeitas. Cada linha é gravada assim que fica pronta, então dá para interromper e retomar.
+afirmações extraídas, o hash do prompt e o modelo. A versão vem do nome do arquivo do
+prompt (extrair_afirmacoes_v1.txt -> v1). Rodar de novo só chama a LLM para os ids que
+faltam; se o texto do prompt mudar sem trocar a versão, ou se o modelo mudar, as linhas
+antigas deixam de valer e são refeitas: o treino nunca mistura saídas de dois modelos. Cada linha é gravada assim que fica pronta, então dá para interromper e retomar.
 
 A resposta da LLM segue o esquema da #19: {"e_opiniao": bool, "afirmacoes": [{"texto",
 "quem_disse"}]}. O cache guarda as afirmações com quem disse; o treino usa só o `texto`.
@@ -23,8 +23,12 @@ Várias afirmações ou nenhuma (decisão registrada em doc/padronizacao.md): `a
 primeira como `texto_padronizado` e marca `n_afirmacoes`. Com zero (opinião),
 `texto_padronizado` fica vazio e o registro sai do treino de frases curtas.
 
-LLM: qualquer endpoint compatível com a API de chat da OpenAI (Ollama, llama.cpp, vLLM ou
-um provedor hospedado), configurado por LLM_BASE_URL, LLM_MODEL e LLM_API_KEY.
+LLM: o Qwen hospedado, por qualquer endpoint compatível com a API de chat da OpenAI,
+configurado por LLM_BASE_URL, LLM_MODEL (com a versão fixa) e LLM_API_KEY. O pedido leva o
+JSON Schema da #19 em `response_format` (--sem-esquema se o provedor não aceitar), a
+temperatura 0 e o texto truncado em --max-caracteres. LLM_EXTRA_BODY (JSON) entra no corpo
+do pedido, para opções do provedor, como desligar o raciocínio do Qwen3. Erros 429 e 5xx e
+falhas de rede ganham novas tentativas com espera crescente.
 `--provedor fake` devolve o próprio texto, para testar o fluxo sem LLM.
 
 Só biblioteca padrão, como pesquisa/dados/preparar_dados.py.
@@ -38,6 +42,7 @@ import re
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -50,6 +55,34 @@ DATASET = PROCESSED / "dataset.jsonl"
 
 # O prompt recebe o texto neste marcador; sem ele, o texto vai depois do prompt.
 MARCADOR_TEXTO = "{texto}"
+
+# Cerca de 4 mil tokens em português: controla custo e tempo das matérias longas.
+MAX_CARACTERES = 16_000
+TENTATIVAS = 4
+ESPERA_INICIAL = 2.0  # segundos; dobra a cada nova tentativa
+STATUS_TRANSITORIOS = {429, 500, 502, 503, 504}
+
+# Saída da #19, no formato estrito de `response_format` da API da OpenAI.
+ESQUEMA_AFIRMACOES = {
+    "type": "object",
+    "properties": {
+        "e_opiniao": {"type": "boolean"},
+        "afirmacoes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "texto": {"type": "string"},
+                    "quem_disse": {"type": ["string", "null"]},
+                },
+                "required": ["texto", "quem_disse"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["e_opiniao", "afirmacoes"],
+    "additionalProperties": False,
+}
 
 
 @dataclass
@@ -99,8 +132,8 @@ def texto_de_entrada(registro: dict) -> str | None:
     return None
 
 
-def ler_cache(caminho: Path, prompt: Prompt) -> dict[str, dict]:
-    """Linhas do cache feitas com este mesmo prompt, por id. As de outro prompt são ignoradas."""
+def ler_cache(caminho: Path, prompt: Prompt, modelo: str) -> dict[str, dict]:
+    """Linhas do cache feitas com este prompt e este modelo, por id. As demais são ignoradas."""
     if not caminho.exists():
         return {}
     cache = {}
@@ -108,7 +141,7 @@ def ler_cache(caminho: Path, prompt: Prompt) -> dict[str, dict]:
         if not linha.strip():
             continue
         item = json.loads(linha)
-        if item["prompt_sha1"] == prompt.sha1:
+        if item["prompt_sha1"] == prompt.sha1 and item.get("modelo") == modelo:
             cache[item["id"]] = item
     return cache
 
@@ -146,10 +179,40 @@ def extrator_fake(texto: str) -> Extracao:
     return Extracao(afirmacoes=[{"texto": texto, "quem_disse": None}])
 
 
+def requisitar(
+    requisicao: urllib.request.Request,
+    timeout: float,
+    tentativas: int = TENTATIVAS,
+    espera: float = ESPERA_INICIAL,
+    dormir: Callable[[float], None] = time.sleep,
+) -> dict:
+    """POST com novas tentativas para limite de taxa (429), erro do servidor (5xx) e rede."""
+    for tentativa in range(tentativas):
+        try:
+            with urllib.request.urlopen(requisicao, timeout=timeout) as resposta:
+                return json.load(resposta)
+        except urllib.error.HTTPError as erro:
+            if erro.code not in STATUS_TRANSITORIOS or tentativa == tentativas - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if tentativa == tentativas - 1:
+                raise
+        dormir(espera * 2**tentativa)
+    raise AssertionError("inalcançável")
+
+
 def extrator_openai(
-    prompt: Prompt, base_url: str, modelo: str, chave: str | None, timeout: float = 300
+    prompt: Prompt,
+    base_url: str,
+    modelo: str,
+    chave: str | None,
+    timeout: float = 300,
+    esquema: bool = True,
+    max_caracteres: int = MAX_CARACTERES,
+    extra: dict | None = None,
+    dormir: Callable[[float], None] = time.sleep,
 ) -> Extrator:
-    """Endpoint /chat/completions compatível com a OpenAI (Ollama, llama.cpp, vLLM, hospedados)."""
+    """Endpoint /chat/completions compatível com a OpenAI (o Qwen hospedado, ou um local)."""
     url = base_url.rstrip("/") + "/chat/completions"
     cabecalhos = {"Content-Type": "application/json"}
     if chave:
@@ -158,12 +221,17 @@ def extrator_openai(
     def extrair(texto: str) -> Extracao:
         corpo = {
             "model": modelo,
-            "messages": [{"role": "user", "content": prompt.preencher(texto)}],
+            "messages": [{"role": "user", "content": prompt.preencher(texto[:max_caracteres])}],
             "temperature": 0,
+            **(extra or {}),
         }
+        if esquema:
+            corpo["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "afirmacoes", "strict": True, "schema": ESQUEMA_AFIRMACOES},
+            }
         requisicao = urllib.request.Request(url, json.dumps(corpo).encode(), cabecalhos)
-        with urllib.request.urlopen(requisicao, timeout=timeout) as resposta:
-            dados = json.load(resposta)
+        dados = requisitar(requisicao, timeout, dormir=dormir)
         uso = dados.get("usage") or {}
         return Extracao(
             afirmacoes=interpretar_resposta(dados["choices"][0]["message"]["content"]),
@@ -215,7 +283,7 @@ def padronizar(
 ) -> Relatorio:
     """Extrai as afirmações dos registros que ainda não estão no cache e grava no cache."""
     relatorio = Relatorio(versao=prompt.versao, prompt_sha1=prompt.sha1, modelo=modelo)
-    cache = ler_cache(cache_path, prompt)
+    cache = ler_cache(cache_path, prompt, modelo)
     pendentes = []
     for registro in registros:
         relatorio.total += 1
@@ -303,6 +371,8 @@ def main():
     parser.add_argument("--provedor", choices=("openai", "fake"), default="openai")
     parser.add_argument("--paralelo", type=int, default=1, help="chamadas simultâneas à LLM")
     parser.add_argument("--limite", type=int, help="processa no máximo N itens novos")
+    parser.add_argument("--sem-esquema", action="store_true", help="não envia response_format")
+    parser.add_argument("--max-caracteres", type=int, default=MAX_CARACTERES)
     args = parser.parse_args()
 
     if not args.dataset.exists():
@@ -314,7 +384,15 @@ def main():
         base_url, modelo = os.environ.get("LLM_BASE_URL"), os.environ.get("LLM_MODEL")
         if not base_url or not modelo:
             sys.exit("Defina LLM_BASE_URL e LLM_MODEL no .env (ou use --provedor fake).")
-        extrator = extrator_openai(prompt, base_url, modelo, os.environ.get("LLM_API_KEY"))
+        extrator = extrator_openai(
+            prompt,
+            base_url,
+            modelo,
+            os.environ.get("LLM_API_KEY"),
+            esquema=not args.sem_esquema,
+            max_caracteres=args.max_caracteres,
+            extra=json.loads(os.environ.get("LLM_EXTRA_BODY") or "{}"),
+        )
 
     cache_path = caminho_cache(prompt.versao)
     relatorio = padronizar(

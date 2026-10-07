@@ -27,6 +27,7 @@ Os registros vêm de pesquisa/data/processed/dataset.jsonl, nos splits do protoc
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -196,6 +197,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--dataset", type=Path, default=DATASET)
     parser.add_argument("--prompt", type=Path, help="prompt da padronização (#20), para comparar")
+    parser.add_argument(
+        "--modelo",
+        default=os.environ.get("LLM_MODEL"),
+        help="modelo que gerou o cache da padronização (padrão: LLM_MODEL)",
+    )
     parser.add_argument("--com-portal", action="store_true", help="inclui os portais (notebook)")
     parser.add_argument("--saida", type=Path, default=SAIDA)
     args = parser.parse_args()
@@ -208,11 +214,14 @@ def main():
 
     if args.prompt:
         prompt = carregar_prompt(args.prompt)
-        cache = ler_cache(caminho_cache(prompt.versao), prompt)
+        cache = ler_cache(caminho_cache(prompt.versao), prompt, args.modelo)
         if not cache:
-            sys.exit(f"Cache da padronização {prompt.versao} vazio. Rode antes: make padronizar")
+            sys.exit(
+                f"Cache da padronização {prompt.versao} com o modelo {args.modelo} vazio. "
+                "Rode antes: make padronizar"
+            )
         padronizados = list(aplicar(registros, cache))
-        resultado["prompt"] = {"versao": prompt.versao, "sha1": prompt.sha1}
+        resultado["prompt"] = {"versao": prompt.versao, "sha1": prompt.sha1, "modelo": args.modelo}
         resultado["versoes"]["padronizado"] = rodar(padronizados, "texto_padronizado")
         mesmos = [r for r in padronizados if r["texto_padronizado"]]
         resultado["versoes"]["original_mesmos_registros"] = rodar(mesmos, "texto_curto")
