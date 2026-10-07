@@ -12,7 +12,9 @@ um classificador de veracidade treinado com bases brasileiras de fake news. Todo
 | `web/` | React 18 + Vite + TypeScript. `view → controller (hook) → service → API`; HTTP só via `services/httpClient.ts` |
 | `pesquisa/` | Tudo de dados e treinamento. Imagem e serviço `pesquisa` no compose (`Dockerfile`, `requirements.txt`) |
 | `pesquisa/dados/` | Download, coleta (scrapers e Fact Check API) e preparo dos dados |
-| `pesquisa/ml/` | Experimentos de ML. `dados.py` é a única porta de entrada dos dados de treino (splits, limpeza, alvos, pesos); `padronizar.py` (LLM), `atalho.py` (teste de atalho). Container `ml` (PyTorch CPU) no compose |
+| `pesquisa/ml/` | Experimentos de ML. `dados.py` é a única porta de entrada dos dados de treino (splits, limpeza, alvos, pesos); `padronizar.py` (LLM), `atalho.py` (teste de atalho), `avaliar.py` (métricas comuns, lê `previsoes.jsonl` de cada modelo). Container `ml` (PyTorch CPU) no compose |
+| `pesquisa/ml/configs/` | Uma configuração TOML por execução de treino (dados, hiperparâmetros, sementes, saída), lida por `configuracao.py`; o hash dela vai para o `config.json` do modelo |
+| `pesquisa/ml/tests/fixtures/` | `dataset_smoke.jsonl`: afirmações inventadas para o teste de ponta a ponta no CI (nunca texto de veículo) |
 | `pesquisa/anotacoes/` | Anotações da equipe (#5), versionadas: só `id` e rótulos, nunca o texto |
 | `pesquisa/notebooks/` | EDA (`eda_1_datasets.ipynb`, `eda_2_conjunto.ipynb`) |
 | `pesquisa/data/` | Fora do Git. `raw/` (bases e coletas, com cache) e `processed/` (`dataset.jsonl`) |
@@ -54,6 +56,9 @@ Segredos ficam em `.env` (copiar de `.env.example`): `FACTCHECK_API_KEY`, `LLM_*
 - Na pesquisa, a raiz dos caminhos é `pesquisa/` (`RAIZ = Path(__file__).parent.parent`);
   os comandos rodam a partir da raiz do repositório, no host e no container.
 - Novo código em `pesquisa/ml/` vem com testes em `pesquisa/ml/tests/` (rodam no CI, job "ML").
+- Todo script de treino lê uma configuração de `pesquisa/ml/configs/` e grava as previsões com
+  `avaliar.gravar_previsoes()` (`id`, `split`, `p1`, `p2`), para o `avaliar.py` medir todos do mesmo jeito.
+- Na API, cada modelo é um adaptador de `ClassificadorClient` (`api/app/integrations/classificador_client.py`).
 
 ## Fluxo de trabalho
 

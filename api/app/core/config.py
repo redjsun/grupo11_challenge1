@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     ai_provider: str = "fake"
     ai_api_key: str = ""
 
+    # Classificador de veracidade (integrations/classificador_client.py): "fake" roda sem modelo;
+    # os modelos publicados ficam em models_dir/atual.
+    classificador_provider: str = "fake"
+    models_dir: str = "/app/models"
+
 
 @lru_cache
 def get_settings() -> Settings:
