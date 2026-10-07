@@ -1,16 +1,16 @@
 """Padroniza o texto curto do treino com o mesmo prompt de extração do uso (issue #20).
 
 Uso:
-    python ml/padronizar.py --prompt api/app/prompts/extrair_afirmacoes_v1.txt
-    python ml/padronizar.py --prompt ... --limite 50     # amostra, para medir tempo e custo
+    python pesquisa/ml/padronizar.py --prompt api/app/prompts/extrair_afirmacoes_v1.txt
+    python pesquisa/ml/padronizar.py --prompt ... --limite 50     # amostra, para medir tempo e custo
 
 Em uso, o classificador recebe afirmações extraídas pela LLM; no treino, recebia o
 `texto_curto` original (manchete nos verdadeiros, alegação de checador nos falsos). Este
-script passa todos os registros de data/processed/dataset.jsonl, de todos os splits, pelo
+script passa todos os registros de pesquisa/data/processed/dataset.jsonl, de todos os splits, pelo
 mesmo prompt do uso. Quem não tem `texto_curto` (Fake.br, verdadeiras do FakeTrue.Br, a
 maior parte das mensagens) é extraído do `texto`.
 
-Cache: data/processed/padronizado_<versao>.jsonl, uma linha por registro, com o `id`, as
+Cache: pesquisa/data/processed/padronizado_<versao>.jsonl, uma linha por registro, com o `id`, as
 afirmações extraídas e o hash do prompt. A versão vem do nome do arquivo do prompt
 (extrair_afirmacoes_v1.txt -> v1). Rodar de novo só chama a LLM para os ids que faltam;
 se o texto do prompt mudar sem trocar a versão, as linhas antigas deixam de valer e são
@@ -27,7 +27,7 @@ LLM: qualquer endpoint compatível com a API de chat da OpenAI (Ollama, llama.cp
 um provedor hospedado), configurado por LLM_BASE_URL, LLM_MODEL e LLM_API_KEY.
 `--provedor fake` devolve o próprio texto, para testar o fluxo sem LLM.
 
-Só biblioteca padrão, como scripts/preparar_dados.py.
+Só biblioteca padrão, como pesquisa/dados/preparar_dados.py.
 """
 
 import argparse
@@ -271,7 +271,7 @@ def padronizar(
 
 
 def aplicar(registros: Iterable[dict], cache: dict[str, dict]) -> Iterable[dict]:
-    """Acrescenta `texto_padronizado` e `n_afirmacoes` a cada registro (para ml/dados.py).
+    """Acrescenta `texto_padronizado` e `n_afirmacoes` a cada registro (para pesquisa/ml/dados.py).
 
     Regra: a primeira afirmação vira o texto padronizado. Sem afirmação (opinião) ou sem
     linha no cache, `texto_padronizado` fica None e o registro não entra no treino de

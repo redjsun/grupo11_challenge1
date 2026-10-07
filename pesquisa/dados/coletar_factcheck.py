@@ -1,12 +1,12 @@
 """Coleta checagens em português pela Google Fact Check Tools API.
 
 Uso:
-    python scripts/coletar_factcheck.py --descobrir    # quais agências aparecem em PT
-    python scripts/coletar_factcheck.py                # coleta todas as agências de AGENCIAS
-    python scripts/coletar_factcheck.py --sites aosfatos.org
+    python pesquisa/dados/coletar_factcheck.py --descobrir    # quais agências aparecem em PT
+    python pesquisa/dados/coletar_factcheck.py                # coleta todas as agências de AGENCIAS
+    python pesquisa/dados/coletar_factcheck.py --sites aosfatos.org
 
-Precisa da variável FACTCHECK_API_KEY (no ambiente ou no .env da raiz). A saída é
-data/raw/factcheck/checagens.jsonl, uma linha por checagem (alegação + veredito), e
+Precisa da variável FACTCHECK_API_KEY (no ambiente ou no .env da raiz do repositório). A saída é
+pesquisa/data/raw/factcheck/checagens.jsonl, uma linha por checagem (alegação + veredito), e
 o resumo impresso no fim mostra os vereditos mais comuns para montar o mapeamento
 verdadeiro/falso no preparo.
 """
@@ -52,7 +52,7 @@ TERMOS_DESCOBERTA = ["lula", "bolsonaro", "vacina", "eleição", "vídeo", "stf"
 
 def chave_api() -> str:
     chave = os.environ.get("FACTCHECK_API_KEY")
-    env = RAIZ / ".env"
+    env = RAIZ.parent / ".env"  # .env da raiz do repositório
     if not chave and env.exists():
         for linha in env.read_text(encoding="utf-8").splitlines():
             if linha.startswith("FACTCHECK_API_KEY="):

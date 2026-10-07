@@ -8,9 +8,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Dados brutos e processados: gerados por scripts/baixar_dados.sh e scripts/preparar_dados.py
+# Dados brutos e processados: gerados por pesquisa/dados/baixar_dados.sh e preparar_dados.py
 data/
 .ipynb_checkpoints/
 
-# Saídas dos diagnósticos de ml/ (atalho.json etc.), geradas a cada rodada
-ml/saidas/
+# Saídas dos diagnósticos de pesquisa/ml/ (atalho.json etc.), geradas a cada rodada
+pesquisa/ml/saidas/

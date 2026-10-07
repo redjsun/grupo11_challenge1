@@ -1,7 +1,7 @@
 # Padronização do texto curto pela LLM (issue #20)
 
-> **Status:** o lote e o cache estão em `ml/padronizar.py`. Faltam o prompt de extração
-> (#19), a leitura do cache em `ml/dados.py` (#7) e a comparação pelo teste de atalho (#8).
+> **Status:** o lote e o cache estão em `pesquisa/ml/padronizar.py`. Faltam o prompt de extração
+> (#19), a leitura do cache em `pesquisa/ml/dados.py` (#7) e a comparação pelo teste de atalho (#8).
 
 ## Por quê
 
@@ -18,7 +18,7 @@ make padronizar ARGS="--limite 50"   # amostra, com api/app/prompts/extrair_afir
 make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/prompts/..._v2.txt
 ```
 
-- **Entrada:** todos os registros de `data/processed/dataset.jsonl`, de todos os splits. Usa
+- **Entrada:** todos os registros de `pesquisa/data/processed/dataset.jsonl`, de todos os splits. Usa
   o `texto_curto`; sem ele (Fake.br, verdadeiras do FakeTrue.Br, a maior parte das
   mensagens), usa o `texto`.
 - **Prompt:** o arquivo `api/app/prompts/extrair_afirmacoes_vN.txt` da #19, o mesmo do
@@ -29,7 +29,7 @@ make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/
 - **LLM:** qualquer endpoint compatível com a API de chat da OpenAI, por `LLM_BASE_URL`,
   `LLM_MODEL` e `LLM_API_KEY` no `.env`. Serve para a LLM local (Ollama, llama.cpp) e para
   um provedor hospedado. Temperatura 0.
-- **Cache:** `data/processed/padronizado_<versao>.jsonl` (fora do Git), uma linha por `id`
+- **Cache:** `pesquisa/data/processed/padronizado_<versao>.jsonl` (fora do Git), uma linha por `id`
   com as afirmações, a versão e o hash do prompt. A versão vem do nome do arquivo. Rodar
   de novo só processa os ids que faltam (nos retreinos, só as frases novas). Se o texto
   do prompt mudar sem trocar a versão, o hash não bate e as linhas antigas são refeitas.
@@ -41,7 +41,7 @@ make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/
 
 ## Regra para várias afirmações ou nenhuma
 
-Decisão: **o cache guarda todas as afirmações**, e `aplicar()` (que `ml/dados.py` vai
+Decisão: **o cache guarda todas as afirmações**, e `aplicar()` (que `pesquisa/ml/dados.py` vai
 chamar) gera dois campos:
 
 | Caso | `texto_padronizado` | `n_afirmacoes` | No treino de frases curtas |

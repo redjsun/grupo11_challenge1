@@ -1,6 +1,6 @@
-"""Unifica as bases de data/raw/ em data/processed/dataset.jsonl.
+"""Unifica as bases de pesquisa/data/raw/ em pesquisa/data/processed/dataset.jsonl.
 
-Uso: python scripts/preparar_dados.py   (só biblioteca padrão)
+Uso: python pesquisa/dados/preparar_dados.py   (só biblioteca padrão)
 
 Cada linha do JSONL é uma notícia com os campos:
     id, base, fonte, rotulo, veracidade, veredito_original, tipo_sugerido, titulo, texto,
@@ -276,7 +276,7 @@ def ler_fakebr():
 
 
 def ler_boatos():
-    """Checagens coletadas por scripts/coletar_boatos.py.
+    """Checagens coletadas por pesquisa/dados/coletar_boatos.py.
 
     São as URLs do Boatos.org no FakeRecogna (2019–2021), que formam a parte falsa do
     FakeRecogna reconstruído. Boatos mais recentes não são coletados: falsos recentes já vêm
@@ -284,7 +284,7 @@ def ler_boatos():
     """
     arquivo = RAW / "boatos" / "boatos.jsonl"
     if not arquivo.exists():
-        print("data/raw/boatos/boatos.jsonl não encontrado; rode scripts/coletar_boatos.py")
+        print("pesquisa/data/raw/boatos/boatos.jsonl não encontrado; rode pesquisa/dados/coletar_boatos.py")
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         r = json.loads(linha)
@@ -318,10 +318,10 @@ SUFIXO_PORTAL = re.compile(r"\s*\|\s*[^|]{1,30}$")
 
 
 def ler_noticias():
-    """Verdadeiras do FakeRecogna, recoletadas por scripts/coletar_noticias.py (treino)."""
+    """Verdadeiras do FakeRecogna, recoletadas por pesquisa/dados/coletar_noticias.py (treino)."""
     arquivo = RAW / "noticias" / "noticias.jsonl"
     if not arquivo.exists():
-        print("data/raw/noticias/noticias.jsonl não encontrado; rode scripts/coletar_noticias.py")
+        print("pesquisa/data/raw/noticias/noticias.jsonl não encontrado; rode pesquisa/dados/coletar_noticias.py")
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         r = json.loads(linha)
@@ -358,7 +358,7 @@ def ler_faketrue():
     """
     arquivo = RAW / "FakeTrue.Br" / "FakeTrueBr_corpus.csv"
     if not arquivo.exists():
-        print("data/raw/FakeTrue.Br/ não encontrado; rode scripts/baixar_dados.sh")
+        print("pesquisa/data/raw/FakeTrue.Br/ não encontrado; rode pesquisa/dados/baixar_dados.sh")
         return
     with open(arquivo, encoding="utf-8", newline="") as f:
         for par, r in enumerate(csv.DictReader(f)):
@@ -392,10 +392,10 @@ def ler_faketrue():
 
 
 def ler_factcheck():
-    """Alegações checadas pela Google Fact Check API (scripts/coletar_factcheck.py)."""
+    """Alegações checadas pela Google Fact Check API (pesquisa/dados/coletar_factcheck.py)."""
     arquivo = RAW / "factcheck" / "checagens.jsonl"
     if not arquivo.exists():
-        print("data/raw/factcheck/checagens.jsonl não encontrado; rode scripts/coletar_factcheck.py")
+        print("pesquisa/data/raw/factcheck/checagens.jsonl não encontrado; rode pesquisa/dados/coletar_factcheck.py")
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         r = json.loads(linha)
@@ -434,7 +434,7 @@ def ler_fakenewsbr():
     """
     arquivo = RAW / "FakenewsBR_v6_public.csv"
     if not arquivo.exists():
-        print("data/raw/FakenewsBR_v6_public.csv não encontrado; rode scripts/baixar_dados.sh")
+        print("pesquisa/data/raw/FakenewsBR_v6_public.csv não encontrado; rode pesquisa/dados/baixar_dados.sh")
         return
     with open(arquivo, encoding="utf-8", newline="") as f:
         for r in csv.DictReader(f):
@@ -481,10 +481,10 @@ def ler_fakenewsbr():
 
 
 def ler_verdadeiras():
-    """CSV próprio de matérias de portais (scripts/coletar_verdadeiras.py)."""
+    """CSV próprio de matérias de portais (pesquisa/dados/coletar_verdadeiras.py)."""
     arquivo = RAW / "verdadeiras" / "verdadeiras.csv"
     if not arquivo.exists():
-        print("data/raw/verdadeiras/verdadeiras.csv não encontrado; rode scripts/coletar_verdadeiras.py")
+        print("pesquisa/data/raw/verdadeiras/verdadeiras.csv não encontrado; rode pesquisa/dados/coletar_verdadeiras.py")
         return
     with open(arquivo, encoding="utf-8", newline="") as f:
         for r in csv.DictReader(f):
@@ -668,7 +668,7 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
 
 def main():
     if not RAW.exists():
-        sys.exit("data/raw/ não encontrado. Rode antes: bash scripts/baixar_dados.sh")
+        sys.exit("pesquisa/data/raw/ não encontrado. Rode antes: bash pesquisa/dados/baixar_dados.sh")
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     registros, repetidos = [], {}
     urls_vistas, textos_vistos = set(), set()

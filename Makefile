@@ -55,24 +55,26 @@ lint: ## Verifica lint e formatação da API
 format: ## Formata o código da API
 	$(COMPOSE) run --rm --no-deps -v ./api:/app api sh -c "pip install -q -r requirements-dev.txt && ruff format . && ruff check --fix ."
 
-dados: ## Baixa as bases para data/raw/ e gera data/processed/dataset.jsonl e claimpt.jsonl
-	bash scripts/baixar_dados.sh
-	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_dados.py
-	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_claimpt.py
+PESQUISA := $(COMPOSE) --profile pesquisa run --rm --no-deps pesquisa
+
+dados: ## Baixa as bases para pesquisa/data/raw/ e gera dataset.jsonl e claimpt.jsonl em pesquisa/data/processed/
+	bash pesquisa/dados/baixar_dados.sh
+	$(PESQUISA) python pesquisa/dados/preparar_dados.py
+	$(PESQUISA) python pesquisa/dados/preparar_claimpt.py
 
 PROMPT ?= api/app/prompts/extrair_afirmacoes_v1.txt
 
 padronizar: ## Padroniza o texto curto com a LLM (uso: make padronizar [PROMPT=api/app/prompts/extrair_afirmacoes_vN.txt] [ARGS="--limite 50"])
-	$(COMPOSE) --profile eda run --rm --no-deps eda python ml/padronizar.py --prompt $(PROMPT) $(ARGS)
+	$(PESQUISA) python pesquisa/ml/padronizar.py --prompt $(PROMPT) $(ARGS)
 
 atalho: ## Teste de atalho: AUC só pela forma do texto (uso: make atalho [ARGS="--prompt api/app/prompts/extrair_afirmacoes_v1.txt"])
-	$(COMPOSE) --profile eda run --rm --no-deps eda python ml/atalho.py $(ARGS)
+	$(PESQUISA) python pesquisa/ml/atalho.py $(ARGS)
 
-test-ml: ## Roda lint e testes de ml/
-	$(COMPOSE) --profile eda run --rm --no-deps -w /work/ml eda sh -c "pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && pytest -v"
+test-ml: ## Roda lint e testes de pesquisa/ml/
+	$(COMPOSE) --profile pesquisa run --rm --no-deps -w /work/pesquisa/ml pesquisa sh -c "pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && pytest -v"
 
 eda: ## Sobe o Jupyter Lab da EDA em http://localhost:8888
-	$(COMPOSE) --profile eda up -d eda
+	$(COMPOSE) --profile pesquisa up -d pesquisa
 
 clean: ## Remove containers, volumes e imagens do projeto
 	$(COMPOSE) down -v --rmi local

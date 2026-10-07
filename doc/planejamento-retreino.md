@@ -1,14 +1,14 @@
 # Planejamento: coleta contínua e retreino do classificador
 
 > **Status: planejado, não implementado.** Depende de termos o primeiro modelo treinado
-> e avaliado (`ml/treinar.py` e `ml/avaliar.py` ainda não existem).
+> e avaliado (`pesquisa/ml/treinar.py` e `pesquisa/ml/avaliar.py` ainda não existem).
 
 ## Por que retreinar
 
 As fake news acompanham o noticiário: cada época tem seus personagens, golpes e
 assuntos. Um modelo treinado até certa data não conhece o vocabulário que aparece
 depois, e a precisão cai aos poucos (*drift*). O split temporal da base (treino de 2016 a
-2023, validação em 2024 e teste de 2025 em diante, ver `scripts/preparar_dados.py`)
+2023, validação em 2024 e teste de 2025 em diante, ver `pesquisa/dados/preparar_dados.py`)
 mede essa queda. É ele que define a frequência:
 
 - queda pequena no teste temporal: retreinar a cada 3–6 meses;
@@ -30,7 +30,7 @@ Alternativas consideradas:
 | Airflow | 4+ containers e centenas de MB a GB de RAM para um fluxo de poucas etapas |
 | Prefect / Dagster | mais leves que o Airflow, mas ainda são um serviço a mais para manter |
 | cron do host / Agendador de Tarefas do Windows | a configuração fica presa a uma máquina |
-| GitHub Actions agendado | o cache de `data/` não persiste entre execuções |
+| GitHub Actions agendado | o cache de `pesquisa/data/` não persiste entre execuções |
 
 Se o projeto crescer, a migração para um orquestrador é direta: cada linha do
 `crontab` vira uma tarefa de DAG.
@@ -39,20 +39,20 @@ Se o projeto crescer, a migração para um orquestrador é direta: cada linha do
 
 ```
 diário   coletar_factcheck ─┐
-         coletar_verdadeiras┼─> (dados novos em data/raw/, incremental pelo cache)
+         coletar_verdadeiras┼─> (dados novos em pesquisa/data/raw/, incremental pelo cache)
          coletar_boatos ────┘
 
 mensal   preparar_dados ─> treinar ─> avaliar ─┬─> publicar em models/ (se melhor)
                                                └─> manter o modelo atual (se pior)
 ```
 
-Rascunho do `ml/crontab`:
+Rascunho do `pesquisa/ml/crontab`:
 
 ```cron
 # coleta incremental diária (só baixa o que é novo, graças ao cache)
-0 3 * * *  python scripts/coletar_factcheck.py && python scripts/coletar_verdadeiras.py --de $(date +%Y-%m)
+0 3 * * *  python pesquisa/dados/coletar_factcheck.py && python pesquisa/dados/coletar_verdadeiras.py --de $(date +%Y-%m)
 # retreino mensal, no dia 1, com portão de qualidade
-0 5 1 * *  python scripts/preparar_dados.py && python ml/treinar.py && python ml/avaliar.py --publicar-se-melhor
+0 5 1 * *  python pesquisa/dados/preparar_dados.py && python pesquisa/ml/treinar.py && python pesquisa/ml/avaliar.py --publicar-se-melhor
 ```
 
 Rascunho do serviço no `compose.yaml`:
@@ -91,6 +91,6 @@ A imagem precisa ganhar o binário do supercronic no `Dockerfile`.
 
 ## Ordem
 
-1. Fechar a EDA (`notebooks/eda_1_datasets.ipynb` e `notebooks/eda_2_conjunto.ipynb`).
-2. Treinar e avaliar o primeiro modelo (`ml/`), medindo a queda no teste temporal.
+1. Fechar a EDA (`pesquisa/notebooks/eda_1_datasets.ipynb` e `pesquisa/notebooks/eda_2_conjunto.ipynb`).
+2. Treinar e avaliar o primeiro modelo (`pesquisa/ml/`), medindo a queda no teste temporal.
 3. Com essa medida, definir a frequência e implementar o agendador.

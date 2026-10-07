@@ -1,12 +1,12 @@
 """Recoleta o texto original das notícias verdadeiras do FakeRecogna.
 
 Uso:
-    python scripts/coletar_noticias.py                # todas as URLs recuperáveis
-    python scripts/coletar_noticias.py --amostra 200
+    python pesquisa/dados/coletar_noticias.py                # todas as URLs recuperáveis
+    python pesquisa/dados/coletar_noticias.py --amostra 200
 
 O FakeRecogna só traz o texto lematizado, então baixamos as páginas de novo (cache em
-data/raw/noticias/paginas/) e extraímos título, data e corpo da matéria. A saída é
-data/raw/noticias/noticias.jsonl, com uma linha por URL.
+pesquisa/data/raw/noticias/paginas/) e extraímos título, data e corpo da matéria. A saída é
+pesquisa/data/raw/noticias/noticias.jsonl, com uma linha por URL.
 """
 
 import argparse
@@ -35,7 +35,7 @@ MIN_CARACTERES_PARAGRAFO = 40
 
 def urls_verdadeiras() -> dict[str, dict]:
     if not FAKERECOGNA.exists():
-        sys.exit("data/raw/FakeRecogna.csv não encontrado. Rode antes: bash scripts/baixar_dados.sh")
+        sys.exit("pesquisa/data/raw/FakeRecogna.csv não encontrado. Rode antes: bash pesquisa/dados/baixar_dados.sh")
     with open(FAKERECOGNA, encoding="utf-8", newline="") as f:
         return {
             linha["URL"].strip(): linha

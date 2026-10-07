@@ -1,9 +1,9 @@
 """Teste de atalho: quanto a forma do texto, sem o conteúdo, já separa as classes (issue #8).
 
 Uso:
-    python ml/atalho.py
-    python ml/atalho.py --prompt api/app/prompts/extrair_afirmacoes_v1.txt   # + padronizado
-    python ml/atalho.py --com-portal    # inclui os portais, como o notebook eda_2 (seção 7)
+    python pesquisa/ml/atalho.py
+    python pesquisa/ml/atalho.py --prompt api/app/prompts/extrair_afirmacoes_v1.txt   # + padronizado
+    python pesquisa/ml/atalho.py --com-portal    # inclui os portais, como o notebook eda_2 (seção 7)
 
 Uma regressão logística que só vê tamanho, pontuação, caixa alta e a primeira palavra. A AUC
 dela é o piso: um classificador que não passa dela com folga aprendeu o formato, não a
@@ -17,11 +17,11 @@ Versões do texto:
 Com a padronização igualando o formato, a AUC do padronizado deve ficar abaixo da do
 original nos mesmos registros.
 
-A saída vai para ml/saidas/atalho.json, que o avaliar.py (#13) lê para comparar cada modelo
+A saída vai para pesquisa/ml/saidas/atalho.json, que o avaliar.py (#13) lê para comparar cada modelo
 com o piso.
 
-Os registros vêm de data/processed/dataset.jsonl, nos splits do protocolo B, sem os portais
-(como em ml/dados.py, #7). Quando a #7 existir, `carregar_registros` passa a usar
+Os registros vêm de pesquisa/data/processed/dataset.jsonl, nos splits do protocolo B, sem os portais
+(como em pesquisa/ml/dados.py, #7). Quando a #7 existir, `carregar_registros` passa a usar
 `dados.carregar()`.
 """
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Baixa as bases brutas para data/raw/, fixadas em commits conhecidos.
-# Uso: bash scripts/baixar_dados.sh   (ou: make dados)
+# Baixa as bases brutas para pesquisa/data/raw/, fixadas em commits conhecidos.
+# Uso: bash pesquisa/dados/baixar_dados.sh   (ou: make dados)
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,7 +18,7 @@ FAKERECOGNA_URL="https://huggingface.co/datasets/recogna-nlp/FakeRecogna/resolve
 FAKERECOGNA_SHA256="282110d0390a6dff37fedf43a22b3e61b97e30381bf96dacaa668ed45d3c4407"
 
 if [ -d "$RAW/Fake.br-Corpus/full_texts" ]; then
-  echo "Fake.br-Corpus já existe em data/raw/, pulando."
+  echo "Fake.br-Corpus já existe em pesquisa/data/raw/, pulando."
 else
   echo "Baixando Fake.br-Corpus..."
   git clone --quiet "$FAKEBR_REPO" "$RAW/Fake.br-Corpus"
@@ -27,7 +27,7 @@ fi
 
 CSV="$RAW/FakeRecogna.csv"
 if [ -f "$CSV" ]; then
-  echo "FakeRecogna.csv já existe em data/raw/, pulando."
+  echo "FakeRecogna.csv já existe em pesquisa/data/raw/, pulando."
 else
   echo "Baixando FakeRecogna..."
   curl -fsSL "$FAKERECOGNA_URL" -o "$CSV"
@@ -37,14 +37,14 @@ echo "$FAKERECOGNA_SHA256  $CSV" | sha256sum -c --quiet - \
   || { echo "Hash do FakeRecogna.csv não confere." >&2; exit 1; }
 
 # FakenewsBR v6 (variante pública, com e-mails/CPFs/telefones mascarados). Usamos só
-# parte das falsas; ver ler_fakenewsbr() em scripts/preparar_dados.py.
+# parte das falsas; ver ler_fakenewsbr() em pesquisa/dados/preparar_dados.py.
 FAKENEWSBR_COMMIT="44a55e5c0dee6d8d96824de66dbe462796915b53"
 FAKENEWSBR_URL="https://media.githubusercontent.com/media/thiago-cg/fakenewsbr-v4/$FAKENEWSBR_COMMIT/data/FakenewsBR_v6_public.csv"
 FAKENEWSBR_SHA256="75dc4b45649e6d2232cca5acee018cb70596cd824d2ccc5827f6e295a81e9a0b"
 
 CSV="$RAW/FakenewsBR_v6_public.csv"
 if [ -f "$CSV" ]; then
-  echo "FakenewsBR_v6_public.csv já existe em data/raw/, pulando."
+  echo "FakenewsBR_v6_public.csv já existe em pesquisa/data/raw/, pulando."
 else
   echo "Baixando FakenewsBR (214 MB)..."
   curl -fsSL "$FAKENEWSBR_URL" -o "$CSV"
@@ -60,7 +60,7 @@ FAKETRUE_REPO="https://github.com/jpchav98/FakeTrue.Br.git"
 FAKETRUE_COMMIT="37cdd5f2ac697a7cd3d678373f29a9d731a13e02"
 
 if [ -f "$RAW/FakeTrue.Br/FakeTrueBr_corpus.csv" ]; then
-  echo "FakeTrue.Br já existe em data/raw/, pulando."
+  echo "FakeTrue.Br já existe em pesquisa/data/raw/, pulando."
 else
   echo "Baixando FakeTrue.Br..."
   git clone --quiet "$FAKETRUE_REPO" "$RAW/FakeTrue.Br"
@@ -75,11 +75,11 @@ CLAIMPT_REPO="https://github.com/LIAAD/ClaimPT.git"
 CLAIMPT_COMMIT="317a170356036a189408ae9b774a44be3e55ccad"
 
 if [ -d "$RAW/ClaimPT/dataset_sample" ]; then
-  echo "ClaimPT já existe em data/raw/, pulando."
+  echo "ClaimPT já existe em pesquisa/data/raw/, pulando."
 else
   echo "Baixando ClaimPT (amostra)..."
   git clone --quiet "$CLAIMPT_REPO" "$RAW/ClaimPT"
   git -C "$RAW/ClaimPT" checkout --quiet "$CLAIMPT_COMMIT"
 fi
 
-echo "Dados brutos prontos em data/raw/."
+echo "Dados brutos prontos em pesquisa/data/raw/."

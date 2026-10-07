@@ -48,10 +48,11 @@ services:
     depends_on:
       - api
 
-  eda:
-    build: ./notebooks
-    container_name: fakenews-eda
-    profiles: ["eda"]
+  # Pesquisa: EDA, preparo dos dados e experimentos de ML (pasta pesquisa/).
+  pesquisa:
+    build: ./pesquisa
+    container_name: fakenews-pesquisa
+    profiles: ["pesquisa"]
     env_file:
       - path: .env
         required: false
@@ -61,11 +62,8 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ./notebooks:/work/notebooks
-      - ./scripts:/work/scripts
-      - ./ml:/work/ml
+      - ./pesquisa:/work/pesquisa
       - ./api/app/prompts:/work/api/app/prompts
-      - ./data:/work/data
 
 volumes:
   db_data:
