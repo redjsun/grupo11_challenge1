@@ -1,10 +1,20 @@
 # Índice dos documentos em Markdown do repositório.
 # Cada entrada aponta para um arquivo .md dentro da pasta doc/.
 
-docs: []
-# Exemplo:
-# docs:
-#   - id: visao-geral
-#     titulo: Visão geral do desafio
-#     arquivo: doc/visao-geral.md
-#     descricao: Contexto e objetivos do desafio de fake news.
+docs:
+  - id: arquitetura
+    titulo: Arquitetura do projeto
+    arquivo: doc/arquitetura.md
+    descricao: Organização em camadas + MVC no backend e no frontend.
+  - id: eda
+    titulo: Análise exploratória dos dados
+    arquivo: doc/eda.md
+    descricao: Qualidade, vieses e recomendações sobre as bases Fake.br e Fakepedia.
+  - id: planejamento-retreino
+    titulo: Planejamento de coleta contínua e retreino
+    arquivo: doc/planejamento-retreino.md
+    descricao: Plano futuro (não implementado) de agendamento com supercronic, portão de qualidade e versionamento de modelos.
+  - id: guia-classificacao
+    titulo: Guia de classificação e anotação
+    arquivo: doc/guia-classificacao.md
+    descricao: Rótulos do framework de desordem informacional, arquitetura planejada do classificador, divisão dos dados e guia de anotação da equipe.

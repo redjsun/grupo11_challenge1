@@ -6,3 +6,8 @@ node_modules/
 .env
 .DS_Store
 dist/
+*.tsbuildinfo
+
+# Dados brutos e processados: gerados por scripts/baixar_dados.sh e scripts/preparar_dados.py
+data/
+.ipynb_checkpoints/

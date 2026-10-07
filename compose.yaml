@@ -1,13 +1,40 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: fakenews-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fako}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fako}
+      POSTGRES_DB: ${POSTGRES_DB:-fako}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build: ./api
     container_name: fakenews-api
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fako}:${POSTGRES_PASSWORD:-fako}@db:5432/${POSTGRES_DB:-fako}
     ports:
       - "8000:8000"
     volumes:
       - ./api/app:/app/app
+      - ./api/migrations:/app/migrations
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
 
   web:
     build: ./web
@@ -20,3 +47,17 @@ services:
       - /app/node_modules
     depends_on:
       - api
+
+  eda:
+    build: ./notebooks
+    container_name: fakenews-eda
+    profiles: ["eda"]
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/work/notebooks
+      - ./scripts:/work/scripts
+      - ./data:/work/data
+
+volumes:
+  db_data:
