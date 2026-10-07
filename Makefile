@@ -60,9 +60,9 @@ dados: ## Baixa as bases para data/raw/ e gera data/processed/dataset.jsonl e cl
 	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_dados.py
 	$(COMPOSE) --profile eda run --rm --no-deps eda python scripts/preparar_claimpt.py
 
-PROMPT ?= ml/prompts/extrair_afirmacoes_v1.txt
+PROMPT ?= api/app/prompts/extrair_afirmacoes_v1.txt
 
-padronizar: ## Padroniza o texto curto com a LLM (uso: make padronizar PROMPT=ml/prompts/extrair_afirmacoes_vN.txt [ARGS="--limite 50"])
+padronizar: ## Padroniza o texto curto com a LLM (uso: make padronizar [PROMPT=api/app/prompts/extrair_afirmacoes_vN.txt] [ARGS="--limite 50"])
 	$(COMPOSE) --profile eda run --rm --no-deps eda python ml/padronizar.py --prompt $(PROMPT) $(ARGS)
 
 test-ml: ## Roda lint e testes de ml/

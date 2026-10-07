@@ -64,6 +64,7 @@ services:
       - ./notebooks:/work/notebooks
       - ./scripts:/work/scripts
       - ./ml:/work/ml
+      - ./api/app/prompts:/work/api/app/prompts
       - ./data:/work/data
 
 volumes:

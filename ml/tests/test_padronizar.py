@@ -32,7 +32,9 @@ class ExtratorContador:
 
     def __call__(self, texto: str) -> Extracao:
         self.chamadas.append(texto)
-        return Extracao(afirmacoes=self.respostas.get(texto, [texto]), tokens_entrada=10)
+        textos = self.respostas.get(texto, [texto])
+        afirmacoes = [{"texto": t, "quem_disse": None} for t in textos]
+        return Extracao(afirmacoes=afirmacoes, tokens_entrada=10)
 
 
 @pytest.fixture
@@ -68,23 +70,38 @@ def test_texto_de_entrada_prefere_o_curto_e_cai_no_longo():
     assert texto_de_entrada(REGISTROS[2]) is None
 
 
+UM = {"texto": "um", "quem_disse": None}
+
+
 @pytest.mark.parametrize(
     "resposta, esperado",
     [
-        ('["um", "dois"]', ["um", "dois"]),
-        ('{"afirmacoes": ["um"]}', ["um"]),
-        ('```json\n["um"]\n```', ["um"]),
-        ('Aqui está: ["um", " "] fim', ["um"]),
-        ("[]", []),
+        (
+            '{"e_opiniao": false, "afirmacoes": [{"texto": "vacina causa infertilidade", '
+            '"quem_disse": "deputado Fulano"}, {"texto": "um", "quem_disse": null}]}',
+            [{"texto": "vacina causa infertilidade", "quem_disse": "deputado Fulano"}, UM],
+        ),
+        ('```json\n{"afirmacoes": [{"texto": "um"}]}\n```', [UM]),
+        ('Aqui está: {"afirmacoes": [{"texto": " um ", "quem_disse": ""}]} fim', [UM]),
+        ('{"e_opiniao": true, "afirmacoes": []}', []),
     ],
 )
 def test_interpretar_resposta(resposta, esperado):
     assert interpretar_resposta(resposta) == esperado
 
 
-def test_interpretar_resposta_rejeita_formato_desconhecido():
+@pytest.mark.parametrize(
+    "resposta",
+    [
+        "Não há afirmações.",
+        '["um", "dois"]',  # lista solta, sem o objeto da #19
+        '{"afirmacoes": [{"texto": ""}]}',
+        '{"afirmacoes": [{"texto": "um", "quem_disse": 3}]}',
+    ],
+)
+def test_interpretar_resposta_rejeita_formato_desconhecido(resposta):
     with pytest.raises(ValueError):
-        interpretar_resposta("Não há afirmações.")
+        interpretar_resposta(resposta)
 
 
 def test_padronizar_extrai_do_texto_longo_quando_falta_o_curto(tmp_path, prompt):
@@ -164,7 +181,9 @@ def test_extrator_openai_envia_o_prompt_preenchido_e_le_o_uso(prompt):
             recebido["auth"] = self.headers.get("Authorization")
             recebido["corpo"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             resposta = {
-                "choices": [{"message": {"content": '{"afirmacoes": ["X disse Y"]}'}}],
+                "choices": [
+                    {"message": {"content": '{"afirmacoes": [{"texto": "Y", "quem_disse": "X"}]}'}}
+                ],
                 "usage": {"prompt_tokens": 42, "completion_tokens": 7},
             }
             self.send_response(200)
@@ -180,7 +199,7 @@ def test_extrator_openai_envia_o_prompt_preenchido_e_le_o_uso(prompt):
     extracao = extrator_openai(prompt, base_url, "modelo-x", "chave")("texto do registro")
     servidor.server_close()
 
-    assert extracao == Extracao(["X disse Y"], tokens_entrada=42, tokens_saida=7)
+    assert extracao == Extracao([{"texto": "Y", "quem_disse": "X"}], 42, 7)
     assert recebido["caminho"] == "/v1/chat/completions"
     assert recebido["auth"] == "Bearer chave"
     assert recebido["corpo"]["model"] == "modelo-x"

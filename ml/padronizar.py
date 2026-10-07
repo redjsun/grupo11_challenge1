@@ -1,7 +1,7 @@
 """Padroniza o texto curto do treino com o mesmo prompt de extração do uso (issue #20).
 
 Uso:
-    python ml/padronizar.py --prompt ml/prompts/extrair_afirmacoes_v1.txt
+    python ml/padronizar.py --prompt api/app/prompts/extrair_afirmacoes_v1.txt
     python ml/padronizar.py --prompt ... --limite 50     # amostra, para medir tempo e custo
 
 Em uso, o classificador recebe afirmações extraídas pela LLM; no treino, recebia o
@@ -16,9 +16,12 @@ afirmações extraídas e o hash do prompt. A versão vem do nome do arquivo do 
 se o texto do prompt mudar sem trocar a versão, as linhas antigas deixam de valer e são
 refeitas. Cada linha é gravada assim que fica pronta, então dá para interromper e retomar.
 
-Várias afirmações ou nenhuma (decisão registrada em doc/padronizacao.md): o cache guarda
-todas; `aplicar` usa a primeira como `texto_padronizado` e marca `n_afirmacoes`. Com zero
-(opinião), `texto_padronizado` fica vazio e o registro sai do treino de frases curtas.
+A resposta da LLM segue o esquema da #19: {"e_opiniao": bool, "afirmacoes": [{"texto",
+"quem_disse"}]}. O cache guarda as afirmações com quem disse; o treino usa só o `texto`.
+
+Várias afirmações ou nenhuma (decisão registrada em doc/padronizacao.md): `aplicar` usa a
+primeira como `texto_padronizado` e marca `n_afirmacoes`. Com zero (opinião),
+`texto_padronizado` fica vazio e o registro sai do treino de frases curtas.
 
 LLM: qualquer endpoint compatível com a API de chat da OpenAI (Ollama, llama.cpp, vLLM ou
 um provedor hospedado), configurado por LLM_BASE_URL, LLM_MODEL e LLM_API_KEY.
@@ -51,7 +54,7 @@ MARCADOR_TEXTO = "{texto}"
 
 @dataclass
 class Extracao:
-    afirmacoes: list[str]
+    afirmacoes: list[dict]  # [{"texto": str, "quem_disse": str | None}]
     tokens_entrada: int = 0
     tokens_saida: int = 0
 
@@ -110,8 +113,16 @@ def ler_cache(caminho: Path, prompt: Prompt) -> dict[str, dict]:
     return cache
 
 
-def interpretar_resposta(resposta: str) -> list[str]:
-    """Aceita uma lista JSON de strings ou {"afirmacoes": [...]}, mesmo cercada de texto.
+def _afirmacao(valor) -> dict | None:
+    if isinstance(valor, dict) and isinstance(valor.get("texto"), str):
+        texto, quem_disse = valor["texto"].strip(), valor.get("quem_disse")
+        if texto and (quem_disse is None or isinstance(quem_disse, str)):
+            return {"texto": texto, "quem_disse": (quem_disse or "").strip() or None}
+    return None
+
+
+def interpretar_resposta(resposta: str) -> list[dict]:
+    """Lê {"e_opiniao": ..., "afirmacoes": [{"texto", "quem_disse"}]} (#19), mesmo cercado de texto.
 
     Uma lista vazia quer dizer opinião (nenhuma afirmação checável).
     """
@@ -121,16 +132,18 @@ def interpretar_resposta(resposta: str) -> list[str]:
             valor, _ = json.JSONDecoder().raw_decode(texto, inicio)
         except json.JSONDecodeError:
             continue
-        if isinstance(valor, dict):
-            valor = valor.get("afirmacoes")
-        if isinstance(valor, list) and all(isinstance(v, str) for v in valor):
-            return [v.strip() for v in valor if v.strip()]
+        lista = valor.get("afirmacoes") if isinstance(valor, dict) else None
+        if not isinstance(lista, list):
+            continue
+        afirmacoes = [_afirmacao(v) for v in lista]
+        if all(afirmacoes):
+            return afirmacoes
     raise ValueError(f"Resposta da LLM fora do formato esperado: {resposta[:200]!r}")
 
 
 def extrator_fake(texto: str) -> Extracao:
     """Sem LLM: devolve o texto como única afirmação. Serve para testar o fluxo."""
-    return Extracao(afirmacoes=[texto])
+    return Extracao(afirmacoes=[{"texto": texto, "quem_disse": None}])
 
 
 def extrator_openai(
@@ -269,7 +282,7 @@ def aplicar(registros: Iterable[dict], cache: dict[str, dict]) -> Iterable[dict]
         afirmacoes = item["afirmacoes"] if item else []
         yield {
             **registro,
-            "texto_padronizado": afirmacoes[0] if afirmacoes else None,
+            "texto_padronizado": afirmacoes[0]["texto"] if afirmacoes else None,
             "n_afirmacoes": len(afirmacoes) if item else None,
         }
 

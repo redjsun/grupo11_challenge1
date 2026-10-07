@@ -14,17 +14,18 @@ Passar o treino pelo **mesmo prompt** do uso põe as duas classes no mesmo forma
 ## Como roda
 
 ```bash
-make padronizar PROMPT=ml/prompts/extrair_afirmacoes_v1.txt ARGS="--limite 50"  # amostra
-make padronizar PROMPT=ml/prompts/extrair_afirmacoes_v1.txt ARGS="--paralelo 8"  # lote todo
+make padronizar ARGS="--limite 50"   # amostra, com api/app/prompts/extrair_afirmacoes_v1.txt
+make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/prompts/..._v2.txt
 ```
 
 - **Entrada:** todos os registros de `data/processed/dataset.jsonl`, de todos os splits. Usa
   o `texto_curto`; sem ele (Fake.br, verdadeiras do FakeTrue.Br, a maior parte das
   mensagens), usa o `texto`.
-- **Prompt:** o arquivo `extrair_afirmacoes_vN.txt` da #19, o mesmo do uso. O texto do
-  registro entra no marcador `{texto}` (ou no fim, se o prompt não tiver o marcador). A
-  resposta da LLM deve ser uma lista JSON de strings ou `{"afirmacoes": [...]}`; lista
-  vazia quer dizer opinião.
+- **Prompt:** o arquivo `api/app/prompts/extrair_afirmacoes_vN.txt` da #19, o mesmo do
+  uso. O texto do registro entra no marcador `{texto}` (ou no fim, se o prompt não tiver o
+  marcador). A resposta segue o esquema da #19, `{"e_opiniao": ..., "afirmacoes":
+  [{"texto": ..., "quem_disse": ...}]}`; lista vazia quer dizer opinião. O cache guarda o
+  `quem_disse`, mas o treino usa só o `texto`, como o classificador em uso.
 - **LLM:** qualquer endpoint compatível com a API de chat da OpenAI, por `LLM_BASE_URL`,
   `LLM_MODEL` e `LLM_API_KEY` no `.env`. Serve para a LLM local (Ollama, llama.cpp) e para
   um provedor hospedado. Temperatura 0.
