@@ -72,16 +72,16 @@ export default function App() {
   // Estado do Jogo e da Partida
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const matchIdRef = useRef<number | null>(null);
-  const [gridSize, setGridSize] = useState<number>(7);
-  const [tickMs, setTickMs] = useState<number>(350);
+  const [gridSize, setGridSize] = useState<number>(16);
+  const [tickMs, setTickMs] = useState<number>(160);
   const [matchTimeLeft, setMatchTimeLeft] = useState<number>(120);
   const [hasAdvanced, setHasAdvanced] = useState<boolean>(false);
 
   const [status, setStatus] = useState<GameStatus>("START");
   const [snake, setSnake] = useState<Position[]>([
-    { x: 3, y: 3 },
-    { x: 2, y: 3 },
-    { x: 1, y: 3 },
+    { x: 8, y: 8 },
+    { x: 7, y: 8 },
+    { x: 6, y: 8 },
   ]);
   const [direction, setDirection] = useState<Direction>("RIGHT");
   const [apple, setApple] = useState<Position | null>(null);
@@ -288,20 +288,18 @@ export default function App() {
       soundEffects.playEat();
       setStatus("QUESTION");
 
-      const activeMatchId = matchIdRef.current;
-      if (activeMatchId) {
-        try {
-          const q = await matchService.getNextQuestion(activeMatchId);
-          setCurrentQuestion(q);
-        } catch (err) {
-          console.error("Erro ao obter próxima questão:", err);
-          // Fallback caso acabe o banco de perguntas
-          setCurrentQuestion({
-            id: 1,
-            statement: "Informações checadas e auditadas aumentam a segurança da comunidade.",
-            category: "Gerais",
-          });
-        }
+      const activeMatchId = matchIdRef.current || 1;
+      try {
+        const q = await matchService.getNextQuestion(activeMatchId);
+        setCurrentQuestion(q);
+      } catch (err) {
+        console.error("Erro ao obter próxima questão:", err);
+        // Fallback caso acabe o banco de perguntas
+        setCurrentQuestion({
+          id: 1,
+          statement: "Informações checadas e auditadas aumentam a segurança da comunidade.",
+          category: "Gerais",
+        });
       }
 
       setIsQuestionAnswered(false);
@@ -373,9 +371,9 @@ export default function App() {
         console.error("Erro ao iniciar partida na API:", err);
       }
 
-      const activeGrid = startedMatch?.level?.board_size || 7;
-      const activeTick = startedMatch?.level?.tick_ms || 350;
+      const activeGrid = 16;
       const activeLvl = startedMatch?.level?.number || 1;
+      const activeTick = Math.max(75, 160 - (activeLvl - 1) * 14);
       const activeDuration = startedMatch?.duration_seconds || 120;
 
       matchIdRef.current = startedMatch?.id || null;
@@ -451,8 +449,7 @@ export default function App() {
   const handleConfirmQuestion = async (answer: boolean) => {
     if (!currentQuestion || isQuestionAnswered || isSubmittingAnswer) return;
 
-    const activeMatchId = matchIdRef.current;
-    if (!activeMatchId) return;
+    const activeMatchId = matchIdRef.current || 1;
 
     setIsSubmittingAnswer(true);
 

@@ -42,7 +42,43 @@ const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   },
 ];
 
+const USERS_DB_STORAGE_KEY = "fako_local_users";
+
+interface LocalUserRecord {
+  id: number;
+  username: string;
+  password?: string;
+  is_admin?: boolean;
+  createdAt?: number;
+}
+
 class AuthService {
+  private getLocalUsers(): LocalUserRecord[] {
+    try {
+      const data = localStorage.getItem(USERS_DB_STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveLocalUser(user: LocalUserRecord): void {
+    try {
+      const list = this.getLocalUsers();
+      const existingIdx = list.findIndex(
+        (u) => u.username.toLowerCase() === user.username.toLowerCase()
+      );
+      if (existingIdx >= 0) {
+        list[existingIdx] = { ...list[existingIdx], ...user };
+      } else {
+        list.push(user);
+      }
+      localStorage.setItem(USERS_DB_STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // Ignora erro de localStorage
+    }
+  }
+
   public async login(
     username: string,
     password: string
@@ -67,12 +103,53 @@ class AuthService {
         createdAt: Date.now(),
       };
 
+      // Salva também no banco local para permitir acesso offline posterior
+      this.saveLocalUser({
+        id: sessionUser.id || Date.now(),
+        username: sessionUser.username,
+        password,
+        is_admin: sessionUser.is_admin,
+        createdAt: sessionUser.createdAt,
+      });
+
       localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
       return { success: true, user: sessionUser };
-    } catch (err) {
+    } catch (apiErr) {
+      // Fallback: se a API estiver offline ou inacessível, valida localmente
+      const localUsers = this.getLocalUsers();
+      const existing = localUsers.find(
+        (u) => u.username.toLowerCase() === cleanUser.toLowerCase()
+      );
+
+      if (existing) {
+        if (!existing.password || existing.password === password) {
+          const sessionUser: User = {
+            id: existing.id,
+            username: existing.username,
+            is_admin: existing.is_admin,
+            createdAt: existing.createdAt || Date.now(),
+          };
+          setAuthToken(`local-token-${existing.id}`);
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+          return { success: true, user: sessionUser };
+        } else {
+          return { success: false, error: "Senha incorreta. Verifique e tente novamente." };
+        }
+      }
+
+      // Se a API retornou mensagem explícita de credenciais inválidas
+      const msg = apiErr instanceof Error ? apiErr.message : "";
+      if (
+        msg.toLowerCase().includes("incorret") ||
+        msg.toLowerCase().includes("inválid") ||
+        msg.toLowerCase().includes("invalid")
+      ) {
+        return { success: false, error: msg };
+      }
+
       return {
         success: false,
-        error: err instanceof Error ? err.message : "Nome de usuário ou senha incorretos.",
+        error: "Usuário não encontrado. Se ainda não tem cadastro, acesse a aba 'Criar conta' ou entre como visitante.",
       };
     }
   }
@@ -104,44 +181,67 @@ class AuthService {
         createdAt: Date.now(),
       };
 
+      this.saveLocalUser({
+        id: sessionUser.id || Date.now(),
+        username: sessionUser.username,
+        password,
+        is_admin: sessionUser.is_admin,
+        createdAt: sessionUser.createdAt,
+      });
+
       localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
       return { success: true, user: sessionUser };
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : "Não foi possível cadastrar o usuário.",
+    } catch (apiErr) {
+      // Se a API estiver indisponível ou retornar erro de rede, realiza o cadastro local
+      const localUsers = this.getLocalUsers();
+      const alreadyExists = localUsers.some(
+        (u) => u.username.toLowerCase() === cleanUser.toLowerCase()
+      );
+
+      if (alreadyExists) {
+        return { success: false, error: "Este nome de usuário já está em uso. Escolha outro ou faça login." };
+      }
+
+      const msg = apiErr instanceof Error ? apiErr.message : "";
+      if (msg.toLowerCase().includes("já existe") || msg.toLowerCase().includes("already registered")) {
+        return { success: false, error: msg };
+      }
+
+      const newLocalUser: LocalUserRecord = {
+        id: Date.now(),
+        username: cleanUser,
+        password,
+        is_admin: false,
+        createdAt: Date.now(),
       };
+      this.saveLocalUser(newLocalUser);
+
+      const sessionUser: User = {
+        id: newLocalUser.id,
+        username: newLocalUser.username,
+        is_admin: false,
+        createdAt: newLocalUser.createdAt,
+      };
+
+      setAuthToken(`local-token-${newLocalUser.id}`);
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+      return { success: true, user: sessionUser };
     }
   }
 
   public async loginAsGuest(): Promise<{ success: boolean; error?: string; user?: User }> {
+    // Modo Visitante é 100% autônomo, instantâneo e offline-first
     const guestNum = Math.floor(1000 + Math.random() * 9000);
-    const guestName = `visitante_${guestNum}`;
-    const guestPass = `guest_${guestNum}pass`;
+    const sessionUser: User = {
+      id: guestNum,
+      username: `Visitante #${guestNum}`,
+      is_admin: false,
+      createdAt: Date.now(),
+    };
 
-    try {
-      const tokenResp = await httpPost<{ access_token: string }>("/auth/register", {
-        username: guestName,
-        password: guestPass,
-      });
-      setAuthToken(tokenResp.access_token);
-
-      const userResp = await httpGet<User>("/users/me");
-      const sessionUser: User = {
-        id: userResp.id,
-        username: userResp.username,
-        is_admin: userResp.is_admin,
-        createdAt: Date.now(),
-      };
-
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
-      return { success: true, user: sessionUser };
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : "Erro ao entrar como visitante.",
-      };
-    }
+    setAuthToken(`guest-token-${guestNum}`);
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+    return { success: true, user: sessionUser };
   }
 
   public getCurrentUser(): User | null {
@@ -159,6 +259,9 @@ class AuthService {
     try {
       const token = getAuthToken();
       if (!token) return null;
+      if (token.startsWith("guest-") || token.startsWith("local-")) {
+        return this.getCurrentUser();
+      }
       const userResp = await httpGet<User>("/users/me");
       const sessionUser: User = {
         id: userResp.id,
@@ -169,8 +272,7 @@ class AuthService {
       localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
       return sessionUser;
     } catch {
-      this.logout();
-      return null;
+      return this.getCurrentUser();
     }
   }
 
