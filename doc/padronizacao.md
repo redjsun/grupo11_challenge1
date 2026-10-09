@@ -12,6 +12,9 @@ falsos. Treinado num formato e usado em outro, o modelo erra sem aviso, e a form
 texto já separa as classes (AUC macro de ~0,64 no teste de atalho na validação e no teste).
 Passar o treino pelo **mesmo prompt** do uso põe as duas classes no mesmo formato.
 
+A afirmação padronizada é também a pergunta do jogo, sem outra reescrita: ver
+`doc/banco-perguntas.md`.
+
 ## Como roda
 
 ```bash
@@ -46,11 +49,20 @@ make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/
 - **Escolha do modelo:** 2 a 3 tamanhos de Qwen comparados nos 100 textos BR da #19
   (opinião, checabilidade, `quem_disse`, % de JSON válido, tempo e custo por texto), antes do
   lote. Com o Ollama, os textos não saem da máquina.
-- **Teste no Fake.br (prompt provisório, `qwen3:8b`, 100 registros do treino):** ~10 s por
-  texto no Mac M4. Com a pontuação final tirada depois da LLM, o recorte não tem mais ponto,
-  aspas nem `!` nas duas classes (antes, 17% dos falsos × 59% dos verdadeiros terminavam
-  em ponto). Ainda sai curto demais às vezes ("Temer venceu na CCJ") e com nomes
-  incompletos ("Kim", "Joesley"); o prompt da #19 precisa cobrir isso.
+- **Teste no Fake.br (prompts provisórios, `qwen3:8b`, os mesmos 100 registros do treino,
+  10–13 s por texto no Mac M4):**
+
+  | Rodada | Pedido ao modelo | Palavras (falso × verdadeiro) | Acima de 25 | Opinião |
+  |---|---|---|---|---|
+  | v1 | frase curta, sem pontuação final | 9 × 10 | 0 | 2 × 5 |
+  | v2 | quem, o quê e detalhes, 20–40 palavras | 16 × 17 | – | 2 × 3 |
+  | v3 | o mesmo, numa frase de 12–25 palavras | 14 × 14 | 0 | 1 × 1 |
+
+  A pontuação final é tirada depois da LLM: na primeira rodada, 17% dos falsos × 59% dos
+  verdadeiros terminavam em ponto, um atalho. A v3 é a base para o prompt da #19. Ainda
+  falha em: fidelidade em textos com várias pessoas (fakebr-fake-290 trocou a tese sobre
+  Dilma Rousseff por outro fato do texto), nomes incompletos ("Kim", "o dono da JBS") e
+  agendas de eventos, que deviam sair como opinião.
 - **Cache:** `pesquisa/data/processed/padronizado_<versao>.jsonl` (fora do Git), uma linha por `id`
   com as afirmações, a versão, o hash do prompt e o modelo. Trocar o modelo também refaz as
   linhas. A versão vem do nome do arquivo. Rodar
