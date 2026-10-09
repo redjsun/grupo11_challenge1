@@ -1,17 +1,17 @@
 """Monta um CSV próprio de notícias verdadeiras a partir de portais brasileiros.
 
 Uso:
-    python scripts/coletar_verdadeiras.py                       # todos os portais, 2018 a hoje
-    python scripts/coletar_verdadeiras.py --por-janela 2 --portais poder360 veja
-    python scripts/coletar_verdadeiras.py --de 2024-01 --ate 2024-03   # teste rápido
+    python pesquisa/dados/coletar_verdadeiras.py                       # todos os portais, 2018 a hoje
+    python pesquisa/dados/coletar_verdadeiras.py --por-janela 2 --portais poder360 veja
+    python pesquisa/dados/coletar_verdadeiras.py --de 2024-01 --ate 2024-03   # teste rápido
 
 Usa a API REST do WordPress (100 matérias por requisição, com título, linha fina,
 texto e data). Cada mês é dividido em 6 janelas de ~5 dias, e de cada janela vêm as
 N matérias mais recentes. Janelas curtas espalham a amostra por vários dias do mês,
 em vez de concentrá-la no último dia de cada período. As respostas ficam em cache em
-data/raw/verdadeiras/api/. Os portais são coletados em paralelo, cada um gravando o
-próprio CSV em data/raw/verdadeiras/portais/; no fim eles são juntados em
-data/raw/verdadeiras/verdadeiras.csv.
+pesquisa/data/raw/verdadeiras/api/. Os portais são coletados em paralelo, cada um gravando o
+próprio CSV em pesquisa/data/raw/verdadeiras/portais/; no fim eles são juntados em
+pesquisa/data/raw/verdadeiras/verdadeiras.csv.
 
 Critérios dos portais:
 - linhas editoriais variadas, para o modelo não aprender "qual site" é verdadeiro;

@@ -22,8 +22,11 @@ class Settings(BaseSettings):
     ai_provider: str = "fake"
     ai_api_key: str = ""
 
-    # Modelos locais de Machine Learning (BERTimbau)
-    models_dir: str = "models"
+    # Classificador de veracidade (integrations/classificador_client.py): "fake" roda sem modelo;
+    # os modelos publicados ficam em models_dir/atual.
+    classificador_provider: str = "fake"
+    models_dir: str = "/app/models"
+    # Dispositivo do motor BERTimbau Y1/Y2 (integrations/bertimbau_engine.py)
     ai_device: str = "cpu"
 
 

@@ -1,14 +1,14 @@
 """Coleta as checagens do Boatos.org do FakeRecogna e extrai o texto do boato que circulou.
 
 Uso:
-    python scripts/coletar_boatos.py                # todas as URLs do Boatos.org no FakeRecogna
-    python scripts/coletar_boatos.py --amostra 200  # amostra aleatória
+    python pesquisa/dados/coletar_boatos.py                # todas as URLs do Boatos.org no FakeRecogna
+    python pesquisa/dados/coletar_boatos.py --amostra 200  # amostra aleatória
 
 O FakeRecogna só traz a URL e o rótulo (o texto vem lematizado), então as falsas dele são
 baixadas de novo aqui.
 
-As páginas ficam em cache em data/raw/boatos/paginas/, então rodar de novo só baixa o
-que falta. A saída é data/raw/boatos/boatos.jsonl, com uma linha por URL.
+As páginas ficam em cache em pesquisa/data/raw/boatos/paginas/, então rodar de novo só baixa o
+que falta. A saída é pesquisa/data/raw/boatos/boatos.jsonl, com uma linha por URL.
 
 Do texto do Boatos.org, só interessa o que foi escrito por quem espalhou o boato:
     alegacao     parágrafo "Boato – ...", resumo da alegação na voz do boato
@@ -40,7 +40,7 @@ PREFIXO_BOATO = re.compile(r"^\s*Boato\s*[–—-]\s*", re.I)
 
 def urls_do_fakerecogna() -> list[str]:
     if not FAKERECOGNA.exists():
-        sys.exit("data/raw/FakeRecogna.csv não encontrado. Rode antes: bash scripts/baixar_dados.sh")
+        sys.exit("pesquisa/data/raw/FakeRecogna.csv não encontrado. Rode antes: bash pesquisa/dados/baixar_dados.sh")
     with open(FAKERECOGNA, encoding="utf-8", newline="") as f:
         return [
             linha["URL"].strip()

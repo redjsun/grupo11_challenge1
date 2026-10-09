@@ -1,6 +1,6 @@
-"""Monta data/processed/claimpt.jsonl a partir do ClaimPT (LIAAD/INESC TEC).
+"""Monta pesquisa/data/processed/claimpt.jsonl a partir do ClaimPT (LIAAD/INESC TEC).
 
-Uso: python scripts/preparar_claimpt.py   (só biblioteca padrão)
+Uso: python pesquisa/dados/preparar_claimpt.py   (só biblioteca padrão)
 
 O ClaimPT são notícias da agência Lusa, em português europeu, com trechos anotados como
 afirmação (claim) ou não-afirmação. Não há rótulo de veracidade, por isso ele fica fora do
@@ -8,9 +8,9 @@ dataset.jsonl: serve para avaliar a extração de afirmações pela LLM (pipelin
 uso 3.2), inclusive o "quem disse" (claimer).
 
 Origem dos dados, nesta ordem:
-    data/raw/ClaimPT-completo/   o dataset completo (1.308 artigos), obtido pelo Data Use
+    pesquisa/data/raw/ClaimPT-completo/   o dataset completo (1.308 artigos), obtido pelo Data Use
                                  Agreement e copiado à mão, com a mesma estrutura da amostra
-    data/raw/ClaimPT/dataset_sample/   a amostra pública (20 artigos), de baixar_dados.sh
+    pesquisa/data/raw/ClaimPT/dataset_sample/   a amostra pública (20 artigos), de baixar_dados.sh
 
 Cada pasta tem um annotations.jsonl (uma linha por artigo) e news_articles/*.txt.
 
@@ -25,7 +25,7 @@ ser citado várias vezes ("Netanyahu", "o primeiro-ministro israelita"). Trechos
 posições não batem com o texto são descartados e contados no resumo.
 
 A licença é CC BY-NC-ND 4.0: uso não comercial e sem redistribuir versões derivadas. A
-saída fica em data/, que está no .gitignore.
+saída fica em pesquisa/data/, que está no .gitignore.
 """
 
 import json
@@ -122,7 +122,7 @@ def ler_artigos(pasta: Path, amostra: bool, descartados: dict):
 def main():
     origem = next(((pasta, amostra) for pasta, amostra in ORIGENS if (pasta / "annotations.jsonl").exists()), None)
     if not origem:
-        sys.exit("ClaimPT não encontrado em data/raw/. Rode antes: bash scripts/baixar_dados.sh")
+        sys.exit("ClaimPT não encontrado em pesquisa/data/raw/. Rode antes: bash pesquisa/dados/baixar_dados.sh")
     pasta, amostra = origem
     print(f"Lendo {pasta.relative_to(RAIZ)}" + (" (amostra de 20 artigos)" if amostra else ""))
     SAIDA.parent.mkdir(parents=True, exist_ok=True)

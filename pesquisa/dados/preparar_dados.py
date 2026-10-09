@@ -1,16 +1,20 @@
-"""Unifica as bases de data/raw/ em data/processed/dataset.jsonl.
+"""Unifica as bases de pesquisa/data/raw/ em pesquisa/data/processed/dataset.jsonl.
 
-Uso: python scripts/preparar_dados.py   (só biblioteca padrão)
+Uso: python pesquisa/dados/preparar_dados.py   (só biblioteca padrão)
 
 Cada linha do JSONL é uma notícia com os campos:
     id, base, fonte, rotulo, veracidade, veredito_original, tipo_sugerido, titulo, texto,
     texto_curto, categoria, data, autor, url, par_id, metricas, split, split_produto,
-    origem_rotulo
+    origem_rotulo, tipo, sinais
 
 - `base`: de onde vem o rótulo (fakebr, fakerecogna, faketrue, factcheck, fakenewsbr,
   verdadeiras). Os boatos do Boatos.org entram só como a parte falsa do FakeRecogna.
-- `origem_rotulo`: por que o rótulo é confiável (agencia, curadoria, portal ou mensagem),
-  para pesar os exemplos no treino (ver ORIGEM_ROTULO).
+- `origem_rotulo`: por que o rótulo é confiável (agencia, curadoria, portal,
+  portal_verificado, mensagem ou equipe), para pesar os exemplos no treino (ver
+  ORIGEM_ROTULO_PESO). `portal_verificado`: matéria de portal que passou nos filtros e na
+  auditoria (#6, ver verificar_portais).
+- `tipo` e `sinais`: só nos itens anotados pela equipe (pesquisa/anotacoes/consolidado.csv,
+  ver aplicar_anotacoes); nos demais, null.
 - `veracidade`: falso, enganoso ou verdadeiro. `rotulo` é a versão binária (fake ou true)
   e fica vazio (null) nos enganosos, que só existem nas bases com veredito de agência.
 - `veredito_original`: o veredito da agência, normalizado; `tipo_sugerido`: o tipo de
@@ -26,7 +30,7 @@ Cada linha do JSONL é uma notícia com os campos:
   sorteadas por par em 80/10/10; as checagens e os portais vão por data (treino de 2016 a
   2023, validação em 2024, teste de 2025 em diante); as mensagens de WhatsApp e de COVID
   ficam no treino. Ficam `fora` os registros sem data, os anteriores a 2016 e as
-  quase-duplicatas, e viram `reserva` os que sobram no equilíbrio entre as classes (ver
+  quase-duplicatas, e viram `reserva` os portais e os que sobram no equilíbrio (ver
   definir_split_produto e equilibrar).
 
 Registros repetidos (mesma URL ou mesmo início de texto) entram uma vez só, na primeira
@@ -49,6 +53,7 @@ csv.field_size_limit(2**31 - 1)
 RAIZ = Path(__file__).resolve().parent.parent
 RAW = RAIZ / "data" / "raw"
 SAIDA = RAIZ / "data" / "processed" / "dataset.jsonl"
+ANOTACOES = RAIZ / "anotacoes" / "consolidado.csv"
 
 MESES = {
     "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
@@ -212,8 +217,13 @@ def definir_split_produto(registro: dict) -> str:
 
 
 # Peso de cada origem de rótulo no treino (doc da pipeline, 04): o rótulo de portal é
-# verdadeiro por suposição, e o "true" das mensagens quer dizer só "não é desinformação".
-ORIGEM_ROTULO_PESO = {"agencia": 1.0, "curadoria": 1.0, "portal": 0.7, "mensagem": 0.7}
+# verdadeiro por suposição (fica fora do dataset selecionado, ver equilibrar), e o "true"
+# das mensagens quer dizer só "não é desinformação". `equipe` (#5), `jogo` (revisões do
+# admin, #29) e `portal_verificado` (#6) entram com 1,0 até a validação dizer outra coisa.
+ORIGEM_ROTULO_PESO = {
+    "agencia": 1.0, "curadoria": 1.0, "portal": 0.7, "mensagem": 0.7,
+    "equipe": 1.0, "jogo": 1.0, "portal_verificado": 1.0,
+}
 
 
 def origem_rotulo(registro: dict) -> str:
@@ -227,6 +237,109 @@ def origem_rotulo(registro: dict) -> str:
     if base == "fakenewsbr" and registro["fonte"] in FAKENEWSBR_MENSAGENS:
         return "mensagem"
     return "agencia"
+
+
+SINAIS = ("pede_compartilhamento", "urgencia", "apelo_emocional", "ataque")
+
+
+def aplicar_anotacoes(registros: list[dict], caminho: Path = ANOTACOES) -> int:
+    """Rótulo final da equipe (consolidar_anotacoes.py, #5), juntado pelo id.
+
+    O registro ganha `tipo` e `sinais`, a veracidade anotada substitui a original e a origem
+    vira `equipe`. O split é o do registro. Sátira (`fora_escopo`) sai dos dois protocolos;
+    opinião não tem veracidade anotada e fica com a original.
+    """
+    if not caminho.exists():
+        return 0
+    with open(caminho, encoding="utf-8", newline="") as entrada:
+        rotulos = {linha["id"]: linha for linha in csv.DictReader(entrada)}
+    aplicados = 0
+    for registro in registros:
+        if not (rotulo := rotulos.get(registro["id"])):
+            continue
+        registro["tipo"] = rotulo["tipo"]
+        registro["sinais"] = {sinal: int(rotulo[sinal]) for sinal in SINAIS}
+        if rotulo["veracidade"]:
+            registro["veracidade"] = rotulo["veracidade"]
+            registro["rotulo"] = ROTULO_POR_VERACIDADE[rotulo["veracidade"]]
+        registro["origem_rotulo"] = "equipe"
+        if rotulo["tipo"] == "fora_escopo":
+            registro["split"] = registro["split_produto"] = "fora"
+        aplicados += 1
+    return aplicados
+
+
+# Dataset de verdadeiros confiáveis (#6, doc/dataset-verdadeiras.md): matérias de portal que
+# passam nos filtros, de veículos aprovados na auditoria manual, viram `portal_verificado`.
+VEICULOS_VERIFICADOS = RAIZ / "anotacoes" / "veiculos-verificados.csv"
+AUDITORIA_VERDADEIRAS = RAIZ / "anotacoes" / "auditoria-verdadeiras.csv"
+# Seções que não são notícia factual: opinião, vídeo, ao vivo, publicidade, entrevista.
+SECOES_FORA = re.compile(
+    r"/(opiniao|colunas?|colunistas?|blogs?|videos?|ao-vivo|podcasts?|publieditorial|"
+    r"patrocinado|conteudo-patrocinado|especial-publicitario|editorial|artigos?|analise|"
+    r"entrevistas?|charges?)/"
+)
+TITULO_FORA = re.compile(r"^\s*(ao vivo|opinião|análise|artigo|editorial|entrevista)\b", re.I)
+# Matéria que relata a fala de alguém: a matéria pode estar certa e a afirmação, falsa.
+RELATA_FALA = re.compile(
+    r"\b(diz|dizem|disse|afirma|afirmam|afirmou|declara|declarou|alega|alegou|garante|"
+    r"defende|nega|negou|critica|acusa|acusou|admite|avalia|aponta|cobra|promete|"
+    r"prometeu|ataca|rebate|sugere|insinua|classifica)\b"
+    r"|(^|[,;:]\s*)segundo\b",  # "Segundo a PF, ...", mas não "em segundo turno"
+    re.I,
+)
+ASPAS = re.compile(r"[\"“”«»]|‘[^’]+’|'[^']+'(?!\w)")
+
+
+def motivo_filtro_portal(registro: dict) -> str | None:
+    """Por que a matéria de portal não serve como verdadeiro confiável; None se passa."""
+    titulo = (registro.get("texto_curto") or "").strip()
+    if not titulo:
+        return "sem título"
+    url = (registro.get("url") or "").lower()
+    if SECOES_FORA.search(url) or "youtu" in url or TITULO_FORA.search(titulo):
+        return "opinião, vídeo, ao vivo ou publicidade"
+    if titulo.endswith("?"):
+        return "pergunta"
+    if RELATA_FALA.search(titulo) or ASPAS.search(titulo):
+        return "relata fala"
+    return None
+
+
+def verificar_portais(
+    registros: list[dict],
+    veiculos: Path = VEICULOS_VERIFICADOS,
+    auditoria: Path = AUDITORIA_VERDADEIRAS,
+) -> dict[str, int]:
+    """Marca `portal_verificado` nas matérias que passam nos filtros, de veículo aprovado.
+
+    Os veículos aprovados vêm de auditar_verdadeiras.py (`aceito=1`); sem esse arquivo,
+    nenhuma matéria vira verificada. Itens que a auditoria achou com problema ficam `portal`.
+    """
+    if not veiculos.exists():
+        return {}
+    with open(veiculos, encoding="utf-8", newline="") as entrada:
+        aprovados = {linha["fonte"] for linha in csv.DictReader(entrada) if linha["aceito"] == "1"}
+    com_problema = set()
+    if auditoria.exists():
+        with open(auditoria, encoding="utf-8", newline="") as entrada:
+            com_problema = {
+                linha["id"] for linha in csv.DictReader(entrada) if linha["problema"] != "nenhum"
+            }
+    motivos: dict[str, int] = {}
+    for registro in registros:
+        if registro["origem_rotulo"] != "portal" or registro["base"] != "verdadeiras":
+            continue
+        motivo = motivo_filtro_portal(registro)
+        if motivo is None and registro["fonte"] not in aprovados:
+            motivo = "veículo não aprovado"
+        if motivo is None and registro["id"] in com_problema:
+            motivo = "problema na auditoria"
+        if motivo is None:
+            registro["origem_rotulo"] = "portal_verificado"
+            motivo = "verificado"
+        motivos[motivo] = motivos.get(motivo, 0) + 1
+    return motivos
 
 
 def definir_split(base: str, grupo: str) -> str:
@@ -246,11 +359,21 @@ def dominio(url: str) -> str | None:
 
 
 def ler_fakebr():
-    base = RAW / "Fake.br-Corpus" / "full_texts"
+    """Textos de size_normalized_texts/, a versão que o corpus recomenda para treino: em cada
+    par, o texto mais longo é cortado no tamanho do mais curto, o que tira o atalho de
+    tamanho. Os metadados só existem em full_texts/ e as métricas descrevem o texto completo.
+
+    A numeração das duas versões é a mesma, salvo dois pares: 586 e 1607 só existem em
+    full_texts/ e 697 e 1468 só em size_normalized_texts/, sem metadados. Ficam de fora.
+    """
+    base = RAW / "Fake.br-Corpus" / "size_normalized_texts"
+    pasta_meta = RAW / "Fake.br-Corpus" / "full_texts"
     for rotulo in ("fake", "true"):
         pasta = base / rotulo
         for arq in sorted(pasta.glob("*.txt"), key=lambda p: int(p.stem)):
-            meta = (base / f"{rotulo}-meta-information" / f"{arq.stem}-meta.txt")
+            meta = pasta_meta / f"{rotulo}-meta-information" / f"{arq.stem}-meta.txt"
+            if not meta.exists():
+                continue
             linhas = meta.read_text(encoding="utf-8-sig").split("\n")
             autor, url, categoria, data_bruta = (linha.strip() for linha in linhas[:4])
             metricas = {
@@ -276,7 +399,7 @@ def ler_fakebr():
 
 
 def ler_boatos():
-    """Checagens coletadas por scripts/coletar_boatos.py.
+    """Checagens coletadas por pesquisa/dados/coletar_boatos.py.
 
     São as URLs do Boatos.org no FakeRecogna (2019–2021), que formam a parte falsa do
     FakeRecogna reconstruído. Boatos mais recentes não são coletados: falsos recentes já vêm
@@ -284,7 +407,7 @@ def ler_boatos():
     """
     arquivo = RAW / "boatos" / "boatos.jsonl"
     if not arquivo.exists():
-        print("data/raw/boatos/boatos.jsonl não encontrado; rode scripts/coletar_boatos.py")
+        print("pesquisa/data/raw/boatos/boatos.jsonl não encontrado; rode pesquisa/dados/coletar_boatos.py")
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         r = json.loads(linha)
@@ -318,10 +441,10 @@ SUFIXO_PORTAL = re.compile(r"\s*\|\s*[^|]{1,30}$")
 
 
 def ler_noticias():
-    """Verdadeiras do FakeRecogna, recoletadas por scripts/coletar_noticias.py (treino)."""
+    """Verdadeiras do FakeRecogna, recoletadas por pesquisa/dados/coletar_noticias.py (treino)."""
     arquivo = RAW / "noticias" / "noticias.jsonl"
     if not arquivo.exists():
-        print("data/raw/noticias/noticias.jsonl não encontrado; rode scripts/coletar_noticias.py")
+        print("pesquisa/data/raw/noticias/noticias.jsonl não encontrado; rode pesquisa/dados/coletar_noticias.py")
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         r = json.loads(linha)
@@ -358,7 +481,7 @@ def ler_faketrue():
     """
     arquivo = RAW / "FakeTrue.Br" / "FakeTrueBr_corpus.csv"
     if not arquivo.exists():
-        print("data/raw/FakeTrue.Br/ não encontrado; rode scripts/baixar_dados.sh")
+        print("pesquisa/data/raw/FakeTrue.Br/ não encontrado; rode pesquisa/dados/baixar_dados.sh")
         return
     with open(arquivo, encoding="utf-8", newline="") as f:
         for par, r in enumerate(csv.DictReader(f)):
@@ -392,10 +515,10 @@ def ler_faketrue():
 
 
 def ler_factcheck():
-    """Alegações checadas pela Google Fact Check API (scripts/coletar_factcheck.py)."""
+    """Alegações checadas pela Google Fact Check API (pesquisa/dados/coletar_factcheck.py)."""
     arquivo = RAW / "factcheck" / "checagens.jsonl"
     if not arquivo.exists():
-        print("data/raw/factcheck/checagens.jsonl não encontrado; rode scripts/coletar_factcheck.py")
+        print("pesquisa/data/raw/factcheck/checagens.jsonl não encontrado; rode pesquisa/dados/coletar_factcheck.py")
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         r = json.loads(linha)
@@ -434,7 +557,7 @@ def ler_fakenewsbr():
     """
     arquivo = RAW / "FakenewsBR_v6_public.csv"
     if not arquivo.exists():
-        print("data/raw/FakenewsBR_v6_public.csv não encontrado; rode scripts/baixar_dados.sh")
+        print("pesquisa/data/raw/FakenewsBR_v6_public.csv não encontrado; rode pesquisa/dados/baixar_dados.sh")
         return
     with open(arquivo, encoding="utf-8", newline="") as f:
         for r in csv.DictReader(f):
@@ -481,10 +604,10 @@ def ler_fakenewsbr():
 
 
 def ler_verdadeiras():
-    """CSV próprio de matérias de portais (scripts/coletar_verdadeiras.py)."""
+    """CSV próprio de matérias de portais (pesquisa/dados/coletar_verdadeiras.py)."""
     arquivo = RAW / "verdadeiras" / "verdadeiras.csv"
     if not arquivo.exists():
-        print("data/raw/verdadeiras/verdadeiras.csv não encontrado; rode scripts/coletar_verdadeiras.py")
+        print("pesquisa/data/raw/verdadeiras/verdadeiras.csv não encontrado; rode pesquisa/dados/coletar_verdadeiras.py")
         return
     with open(arquivo, encoding="utf-8", newline="") as f:
         for r in csv.DictReader(f):
@@ -600,8 +723,8 @@ def remover_vazamento(registros: list[dict]) -> dict[str, int]:
 
 
 SPLITS_PRODUTO = ("treino", "validacao", "teste")
-# Em validação e teste entram todos os enganosos, e falsos e verdadeiros até esta proporção
-# do número de enganosos: cerca de 38% / 25% / 38%.
+# Em validação e teste entram todos os enganosos e todos os verdadeiros, e falsos até esta
+# proporção do número de enganosos.
 PROPORCAO_AVALIACAO = 1.5
 
 
@@ -611,9 +734,14 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
     1. FakenewsBR, sub-bases de agência: entram os enganosos e os verdadeiros checados, e
        só uma amostra dos falsos de cada agência, até o maior entre os enganosos e os
        verdadeiros dela no split. Sem nenhum falso, a agência viraria pista de "não é falso".
-    2. Treino: os portais completam os verdadeiros só até igualar os falsos.
-    3. Validação e teste: todos os enganosos; falsos e verdadeiros até PROPORCAO_AVALIACAO
-       vezes os enganosos, com os verdadeiros checados e pareados antes dos de portal.
+    2. Portais (`origem_rotulo=portal`): saem do protocolo B. O "verdadeiro" deles é
+       suposição, então não completam os verdadeiros (#6, #7).
+    3. Treino: todos os falsos, enganosos e verdadeiros que sobram. Os verdadeiros ficam
+       abaixo dos falsos; os pesos por classe no treino compensam.
+    4. Validação e teste: todos os enganosos e os verdadeiros; falsos até
+       PROPORCAO_AVALIACAO vezes os enganosos.
+    5. Portais verificados (#6): completam os verdadeiros de cada split até o número de
+       falsos; o que passa disso vira reserva.
     A amostra é determinística (ordem pelo hash do id), para o dataset ser reproduzível. O
     hash leva um prefixo próprio: sem ele, a ordem repetiria o sorteio do split (no
     FakeRecogna o grupo é o próprio id), e os registros de validação e teste, que têm hash
@@ -632,6 +760,11 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
 
     def de_agencia(r: dict) -> bool:
         return r["base"] == "fakenewsbr" and r["fonte"] not in FAKENEWSBR_MENSAGENS
+
+    for r in ativos:
+        if r["origem_rotulo"] == "portal":
+            guardar(r, "portais (fora do dataset selecionado)")
+    ativos = [r for r in ativos if r["split_produto"] != "reserva"]
 
     por_agencia: dict[tuple, int] = {}
     for r in ativos:
@@ -652,23 +785,23 @@ def equilibrar(registros: list[dict]) -> dict[str, int]:
         do_split = [r for r in ativos if r["split_produto"] == split]
         falsos = [r for r in do_split if r["veracidade"] == "falso"]
         enganosos = [r for r in do_split if r["veracidade"] == "enganoso"]
-        verdadeiros = [r for r in do_split if r["veracidade"] == "verdadeiro" and r["base"] != "verdadeiras"]
-        verdadeiros += [r for r in do_split if r["veracidade"] == "verdadeiro" and r["base"] == "verdadeiras"]
-        if split == "treino":
-            n_portal = sum(1 for r in verdadeiros if r["base"] == "verdadeiras")
-            limites = {"falso": len(falsos), "verdadeiro": max(len(falsos), len(verdadeiros) - n_portal)}
-        else:
-            alvo = int(PROPORCAO_AVALIACAO * len(enganosos))
-            limites = {"falso": alvo, "verdadeiro": alvo}
-        for classe, lista in (("falso", falsos), ("verdadeiro", verdadeiros)):
-            for r in lista[limites[classe]:]:
-                guardar(r, f"{split}: {classe}")
+        if split != "treino":
+            for r in falsos[int(PROPORCAO_AVALIACAO * len(enganosos)):]:
+                guardar(r, f"{split}: falso")
+            falsos = falsos[: int(PROPORCAO_AVALIACAO * len(enganosos))]
+        verificados = [r for r in do_split if r["origem_rotulo"] == "portal_verificado"]
+        outros_verdadeiros = sum(
+            r["veracidade"] == "verdadeiro" and r["origem_rotulo"] != "portal_verificado"
+            for r in do_split
+        )
+        for r in verificados[max(len(falsos) - outros_verdadeiros, 0):]:
+            guardar(r, f"{split}: portal verificado além dos falsos")
     return reserva
 
 
 def main():
     if not RAW.exists():
-        sys.exit("data/raw/ não encontrado. Rode antes: bash scripts/baixar_dados.sh")
+        sys.exit("pesquisa/data/raw/ não encontrado. Rode antes: bash pesquisa/dados/baixar_dados.sh")
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     registros, repetidos = [], {}
     urls_vistas, textos_vistos = set(), set()
@@ -692,7 +825,10 @@ def main():
             registro["tipo_sugerido"] = TIPO_POR_VEREDITO.get(registro["veredito_original"])
             registro["origem_rotulo"] = origem_rotulo(registro)
             registro["split_produto"] = definir_split_produto(registro)
+            registro["tipo"] = registro["sinais"] = None
             registros.append(registro)
+    portais = verificar_portais(registros)
+    anotados = aplicar_anotacoes(registros)
     removidos = remover_vazamento(registros)
     reserva = equilibrar(registros)
     contagem, com_curto = {}, {}
@@ -709,6 +845,8 @@ def main():
         for (prot, split, veracidade), n in sorted(contagem.items()):
             if prot == protocolo:
                 print(f"  {split:15} {veracidade:10} {n:6} {com_curto.get((prot, split, veracidade), 0):6}")
+    print("matérias de portal (portal_verificado, ou o motivo de ficar fora):", portais)
+    print("anotados pela equipe (origem_rotulo=equipe):", anotados)
     print("repetidos descartados por base:", repetidos)
     print("quase-duplicatas de treino/validação tiradas dos splits posteriores:", removidos)
     print("reserva (fora do protocolo B só pelo equilíbrio):", reserva)
