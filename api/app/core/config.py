@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     ai_provider: str = "fake"
     ai_api_key: str = ""
 
+    # Modelos locais de Machine Learning (BERTimbau)
+    models_dir: str = "models"
+    ai_device: str = "cpu"
+
 
 @lru_cache
 def get_settings() -> Settings:
