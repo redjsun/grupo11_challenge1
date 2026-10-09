@@ -571,6 +571,123 @@ body {
   color: var(--text-muted);
 }
 
+/* Seleção Semântica (Confiável vs Não Confiável) */
+.semantic-interaction {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.semantic-buttons-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.semantic-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 14px 10px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-color);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.semantic-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.semantic-btn-icon {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
+}
+
+.semantic-btn-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.semantic-btn-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+.semantic-btn-key {
+  margin-top: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-card-subtle);
+  color: var(--text-muted);
+}
+
+.btn-confiavel.active {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.12);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25);
+}
+
+.btn-confiavel .semantic-btn-title {
+  color: #16a34a;
+}
+
+.btn-nao-confiavel.active {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.12);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25);
+}
+
+.btn-nao-confiavel .semantic-btn-title {
+  color: #dc2626;
+}
+
+.official-status-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+}
+
+.official-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.official-badge {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 99px;
+}
+
+.badge-confiavel {
+  background: rgba(22, 163, 74, 0.16);
+  color: #15803d;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+
+.badge-nao-confiavel {
+  background: rgba(220, 38, 38, 0.16);
+  color: #b91c1c;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+}
+
 /* ==================== FASE DE REVELAÇÃO ==================== */
 .feedback-reveal {
   display: flex;

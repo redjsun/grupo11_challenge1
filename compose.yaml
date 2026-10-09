@@ -59,5 +59,17 @@ services:
       - ./scripts:/work/scripts
       - ./data:/work/data
 
+  ml:
+    build: ./ml
+    container_name: fakenews-ml
+    profiles:
+      - ml
+    volumes:
+      - ./ml:/work/ml
+      - ./data:/work/data
+      - ./scripts:/work/scripts
+      - ./anotacoes:/work/anotacoes
+      - ./models:/work/models
+
 volumes:
   db_data:

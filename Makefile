@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados eda clean
+.PHONY: help build up down restart logs ps shell-api shell-web shell-db migrate makemigration seed admin test lint format dados eda ml clean
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -62,6 +62,9 @@ dados: ## Baixa as bases para data/raw/ e gera data/processed/dataset.jsonl e cl
 
 eda: ## Sobe o Jupyter Lab da EDA em http://localhost:8888
 	$(COMPOSE) --profile eda up -d eda
+
+ml: ## Executa o ambiente ML (carregamento e verificação dos dados)
+	$(COMPOSE) --profile ml run --rm ml python -m ml.dados
 
 clean: ## Remove containers, volumes e imagens do projeto
 	$(COMPOSE) down -v --rmi local

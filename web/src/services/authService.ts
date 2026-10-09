@@ -1,14 +1,8 @@
 import { User, UserStats, GameStats, Achievement } from "../types";
+import { httpGet, httpPost, setAuthToken, getAuthToken } from "./httpClient";
 
-const USERS_STORAGE_KEY = "fako_registered_users";
 const SESSION_STORAGE_KEY = "fako_active_session";
 const STATS_STORAGE_KEY_PREFIX = "fako_stats_";
-
-interface StoredUser {
-  username: string;
-  passwordHash: string;
-  createdAt: number;
-}
 
 const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   {
@@ -21,7 +15,7 @@ const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   {
     id: "bullseye",
     title: "Na Mosca!",
-    description: "Acertou a confiabilidade com 100% de exatidão (diferença zero).",
+    description: "Acertou a confiabilidade com 100% de exatidão.",
     icon: "🎯",
     unlocked: false,
   },
@@ -49,124 +43,111 @@ const DEFAULT_ACHIEVEMENTS: Achievement[] = [
 ];
 
 class AuthService {
-  private getStoredUsers(): Record<string, StoredUser> {
-    try {
-      const data = localStorage.getItem(USERS_STORAGE_KEY);
-      return data ? JSON.parse(data) : {};
-    } catch {
-      return {};
-    }
-  }
-
-  private saveStoredUsers(users: Record<string, StoredUser>): void {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  }
-
-  public async login(username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
+  public async login(
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; user?: User }> {
     const cleanUser = username.trim();
     if (!cleanUser || !password) {
       return { success: false, error: "Preencha todos os campos." };
     }
 
-    const users = this.getStoredUsers();
-    const stored = users[cleanUser.toLowerCase()];
+    try {
+      const tokenResp = await httpPost<{ access_token: string }>("/auth/login", {
+        username: cleanUser,
+        password,
+      });
+      setAuthToken(tokenResp.access_token);
 
-    if (!stored || stored.passwordHash !== password) {
-      return { success: false, error: "Nome de usuário ou senha incorretos." };
+      const userResp = await httpGet<User>("/users/me");
+      const sessionUser: User = {
+        id: userResp.id,
+        username: userResp.username,
+        is_admin: userResp.is_admin,
+        createdAt: Date.now(),
+      };
+
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+      return { success: true, user: sessionUser };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Nome de usuário ou senha incorretos.",
+      };
     }
-
-    const sessionUser: User = {
-      username: stored.username,
-      createdAt: stored.createdAt,
-    };
-
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
-    return { success: true, user: sessionUser };
   }
 
-  public async register(username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
+  public async register(
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; user?: User }> {
     const cleanUser = username.trim();
     if (cleanUser.length < 3) {
       return { success: false, error: "O nome de usuário deve ter pelo menos 3 caracteres." };
     }
-    if (password.length < 4) {
-      return { success: false, error: "A senha deve ter pelo menos 4 caracteres." };
+    if (password.length < 6) {
+      return { success: false, error: "A senha deve ter pelo menos 6 caracteres." };
     }
 
-    const users = this.getStoredUsers();
-    const key = cleanUser.toLowerCase();
+    try {
+      const tokenResp = await httpPost<{ access_token: string }>("/auth/register", {
+        username: cleanUser,
+        password,
+      });
+      setAuthToken(tokenResp.access_token);
 
-    if (users[key]) {
-      return { success: false, error: "Este nome de usuário já está em uso. Escolha outro." };
+      const userResp = await httpGet<User>("/users/me");
+      const sessionUser: User = {
+        id: userResp.id,
+        username: userResp.username,
+        is_admin: userResp.is_admin,
+        createdAt: Date.now(),
+      };
+
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+      return { success: true, user: sessionUser };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Não foi possível cadastrar o usuário.",
+      };
     }
-
-    const newUser: StoredUser = {
-      username: cleanUser,
-      passwordHash: password,
-      createdAt: Date.now(),
-    };
-
-    users[key] = newUser;
-    this.saveStoredUsers(users);
-
-    const sessionUser: User = {
-      username: newUser.username,
-      createdAt: newUser.createdAt,
-    };
-
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
-
-    this.saveUserStats(cleanUser, {
-      highScore: 0,
-      maxLevel: 1,
-      gamesPlayed: 0,
-      totalAcertos: 0,
-      totalErros: 0,
-      streakDays: 1,
-      hasSeenTutorial: false,
-      categoryStats: {
-        saude: { acertos: 0, total: 0 },
-        tecnologia: { acertos: 0, total: 0 },
-        gerais: { acertos: 0, total: 0 },
-      },
-      achievements: DEFAULT_ACHIEVEMENTS,
-    });
-
-    return { success: true, user: sessionUser };
   }
 
-  public async loginAsGuest(): Promise<{ success: boolean; user?: User }> {
-    const guestNum = Math.floor(100 + Math.random() * 900);
-    const guestName = `Visitante_${guestNum}`;
-    const sessionUser: User = {
-      username: guestName,
-      createdAt: Date.now(),
-    };
+  public async loginAsGuest(): Promise<{ success: boolean; error?: string; user?: User }> {
+    const guestNum = Math.floor(1000 + Math.random() * 9000);
+    const guestName = `visitante_${guestNum}`;
+    const guestPass = `guest_${guestNum}pass`;
 
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+    try {
+      const tokenResp = await httpPost<{ access_token: string }>("/auth/register", {
+        username: guestName,
+        password: guestPass,
+      });
+      setAuthToken(tokenResp.access_token);
 
-    // Salvar stats padrão para o convidado
-    this.saveUserStats(guestName, {
-      highScore: 0,
-      maxLevel: 1,
-      gamesPlayed: 0,
-      totalAcertos: 0,
-      totalErros: 0,
-      streakDays: 1,
-      hasSeenTutorial: false,
-      categoryStats: {
-        saude: { acertos: 0, total: 0 },
-        tecnologia: { acertos: 0, total: 0 },
-        gerais: { acertos: 0, total: 0 },
-      },
-      achievements: DEFAULT_ACHIEVEMENTS,
-    });
+      const userResp = await httpGet<User>("/users/me");
+      const sessionUser: User = {
+        id: userResp.id,
+        username: userResp.username,
+        is_admin: userResp.is_admin,
+        createdAt: Date.now(),
+      };
 
-    return { success: true, user: sessionUser };
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+      return { success: true, user: sessionUser };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Erro ao entrar como visitante.",
+      };
+    }
   }
 
   public getCurrentUser(): User | null {
     try {
+      const token = getAuthToken();
+      if (!token) return null;
       const session = localStorage.getItem(SESSION_STORAGE_KEY);
       return session ? JSON.parse(session) : null;
     } catch {
@@ -174,7 +155,27 @@ class AuthService {
     }
   }
 
+  public async fetchCurrentUser(): Promise<User | null> {
+    try {
+      const token = getAuthToken();
+      if (!token) return null;
+      const userResp = await httpGet<User>("/users/me");
+      const sessionUser: User = {
+        id: userResp.id,
+        username: userResp.username,
+        is_admin: userResp.is_admin,
+        createdAt: Date.now(),
+      };
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+      return sessionUser;
+    } catch {
+      this.logout();
+      return null;
+    }
+  }
+
   public logout(): void {
+    setAuthToken(null);
     localStorage.removeItem(SESSION_STORAGE_KEY);
   }
 
@@ -222,7 +223,6 @@ class AuthService {
     const current = this.getUserStats(username);
     const newAchievements = [...current.achievements];
 
-    // Atualiza conquistas
     const unlock = (id: string) => {
       const ach = newAchievements.find((a) => a.id === id);
       if (ach && !ach.unlocked) {
