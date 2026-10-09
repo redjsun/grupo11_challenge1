@@ -79,6 +79,11 @@ CONFIG ?= pesquisa/ml/configs/referencia.toml
 referencia: ## Treina a referência TF-IDF ordinal (uso: make referencia [CONFIG=pesquisa/ml/configs/referencia-padronizado.toml])
 	$(ML) python pesquisa/ml/treinar_referencia.py --config $(CONFIG)
 
+CONFIG_BERT ?= pesquisa/ml/configs/bert.toml
+
+bert: ## Treina o BERTimbau ordinal CORAL (uso: make bert [ARGS="--sementes 42 --max-epocas 3"])
+	$(ML) python pesquisa/ml/treinar_bert.py --config $(CONFIG_BERT) $(ARGS)
+
 MODELO ?= models/2026-11/referencia
 
 classificar: ## Teste manual do modelo (uso: make classificar [ARGS='"uma frase"' | ARGS="--amostra 10 --erros" | ARGS=--exportar])

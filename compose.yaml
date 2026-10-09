@@ -89,6 +89,9 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      # Pesos baixados do Hugging Face (BERTimbau) ficam em models/, fora do Git
+      HF_HOME: /work/models/.cache/huggingface
     volumes:
       - ./pesquisa:/work/pesquisa
       - ./api/app/prompts:/work/api/app/prompts
