@@ -288,20 +288,18 @@ export default function App() {
       soundEffects.playEat();
       setStatus("QUESTION");
 
-      const activeMatchId = matchIdRef.current;
-      if (activeMatchId) {
-        try {
-          const q = await matchService.getNextQuestion(activeMatchId);
-          setCurrentQuestion(q);
-        } catch (err) {
-          console.error("Erro ao obter próxima questão:", err);
-          // Fallback caso acabe o banco de perguntas
-          setCurrentQuestion({
-            id: 1,
-            statement: "Informações checadas e auditadas aumentam a segurança da comunidade.",
-            category: "Gerais",
-          });
-        }
+      const activeMatchId = matchIdRef.current || 1;
+      try {
+        const q = await matchService.getNextQuestion(activeMatchId);
+        setCurrentQuestion(q);
+      } catch (err) {
+        console.error("Erro ao obter próxima questão:", err);
+        // Fallback caso acabe o banco de perguntas
+        setCurrentQuestion({
+          id: 1,
+          statement: "Informações checadas e auditadas aumentam a segurança da comunidade.",
+          category: "Gerais",
+        });
       }
 
       setIsQuestionAnswered(false);
@@ -451,8 +449,7 @@ export default function App() {
   const handleConfirmQuestion = async (answer: boolean) => {
     if (!currentQuestion || isQuestionAnswered || isSubmittingAnswer) return;
 
-    const activeMatchId = matchIdRef.current;
-    if (!activeMatchId) return;
+    const activeMatchId = matchIdRef.current || 1;
 
     setIsSubmittingAnswer(true);
 
