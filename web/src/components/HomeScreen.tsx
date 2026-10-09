@@ -441,7 +441,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             {/* Faixa explicativa do tamanho do tabuleiro */}
             <div className="journey-grid-info-pill">
               <span className="info-check">✓</span>
-              <span>Níveis 1–3: tabuleiro 7×7 • Níveis 4–6: 6×6</span>
+              <span>Tabuleiro clássico 16×16 • 6 níveis progressivos</span>
             </div>
           </div>
 
