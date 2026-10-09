@@ -1,7 +1,8 @@
 # Padronização do texto curto pela LLM (issue #20)
 
-> **Status:** o lote e o cache estão em `pesquisa/ml/padronizar.py`. Faltam o prompt de extração
-> (#19), a leitura do cache em `pesquisa/ml/dados.py` (#7) e a comparação pelo teste de atalho (#8).
+> **Status:** o lote e o cache estão em `pesquisa/ml/padronizar.py`, e `pesquisa/ml/dados.py` já lê
+> o cache. Para rodar o lote faltam o prompt de extração (#19) e a escolha do modelo
+> (`LLM_MODEL`); depois, a comparação pelo teste de atalho (#8).
 
 ## Por quê
 
@@ -18,26 +19,38 @@ make padronizar ARGS="--limite 50"   # amostra, com api/app/prompts/extrair_afir
 make padronizar ARGS="--paralelo 8"  # lote todo; outra versão: PROMPT=api/app/prompts/..._v2.txt
 ```
 
-- **Entrada:** todos os registros de `pesquisa/data/processed/dataset.jsonl`, de todos os splits. Usa
-  o `texto_curto`; sem ele (Fake.br, verdadeiras do FakeTrue.Br, a maior parte das
-  mensagens), usa o `texto`.
+- **Entrada:** os registros de `pesquisa/data/processed/dataset.jsonl` com `split_produto` em
+  `treino`, `validacao` ou `teste` (~28 mil), com ou sem `texto_curto`, para as classes ficarem
+  no mesmo formato. `reserva` e `fora` (~42 mil) não entram no modelo do jogo e ficam de fora
+  (`--splits todos` inclui). Usa o `texto_curto`; sem ele (Fake.br, verdadeiras do
+  FakeTrue.Br, a maior parte das mensagens), usa o `texto`.
 - **Prompt:** o arquivo `api/app/prompts/extrair_afirmacoes_vN.txt` da #19, o mesmo do
   uso. O texto do registro entra no marcador `{texto}` (ou no fim, se o prompt não tiver o
   marcador). A resposta segue o esquema da #19, `{"e_opiniao": ..., "afirmacoes":
   [{"texto": ..., "quem_disse": ...}]}`; lista vazia quer dizer opinião. O cache guarda o
   `quem_disse`, mas o treino usa só o `texto`, como o classificador em uso.
-- **LLM:** o **Qwen hospedado**, o mesmo da coleta diária de notícias: treino e uso precisam
-  do mesmo prompt **e** do mesmo modelo, senão o formato volta a divergir. Endpoint
-  compatível com a API de chat da OpenAI, por `LLM_BASE_URL`, `LLM_MODEL` (com a versão
-  fixa, porque provedores atualizam modelos sem aviso) e `LLM_API_KEY` no `.env`.
+- **LLM:** o **Qwen pelo Ollama** (local, `qwen3:8b`), o mesmo da coleta diária de notícias:
+  treino e uso precisam do mesmo prompt **e** do mesmo modelo, senão o formato volta a
+  divergir. O Ollama roda no host, e os containers chegam nele por
+  `LLM_BASE_URL=http://host.docker.internal:11434/v1` (endpoint compatível com a API de chat
+  da OpenAI), com `LLM_MODEL` no `.env`. A tag do Ollama pode mudar num novo `ollama pull`:
+  anotar o id do modelo (`ollama list`; `qwen3:8b` = `500a1f067a9f`) junto do cache.
+  No Ollama, `LLM_EXTRA_BODY={"reasoning_effort": "none"}` desliga o raciocínio do Qwen3
+  (`{"think": false}` é ignorado no endpoint `/v1`); sem isso, cada texto leva 30–60 s.
+  O contexto padrão do Ollama é de 4.096 tokens: textos maiores perdem o começo do prompt,
+  então manter `--max-caracteres` em uns 4 mil ou subir `OLLAMA_CONTEXT_LENGTH`.
   Temperatura 0; o pedido leva o JSON Schema da #19 em `response_format` (`--sem-esquema`
   se o provedor não aceitar) e o texto truncado em `--max-caracteres` (padrão 16 mil, ~4 mil
   tokens). `LLM_EXTRA_BODY` passa opções do provedor, como desligar o raciocínio do Qwen3.
   Erros 429 e 5xx e falhas de rede ganham até 4 tentativas, com espera de 2, 4 e 8 s.
 - **Escolha do modelo:** 2 a 3 tamanhos de Qwen comparados nos 100 textos BR da #19
   (opinião, checabilidade, `quem_disse`, % de JSON válido, tempo e custo por texto), antes do
-  lote. Os textos saem da máquina: só bases públicas e notícias, nunca dados de jogadores;
-  conferir nos termos do provedor que as entradas não são usadas para treino.
+  lote. Com o Ollama, os textos não saem da máquina.
+- **Teste no Fake.br (prompt provisório, `qwen3:8b`, 100 registros do treino):** ~10 s por
+  texto no Mac M4. Com a pontuação final tirada depois da LLM, o recorte não tem mais ponto,
+  aspas nem `!` nas duas classes (antes, 17% dos falsos × 59% dos verdadeiros terminavam
+  em ponto). Ainda sai curto demais às vezes ("Temer venceu na CCJ") e com nomes
+  incompletos ("Kim", "Joesley"); o prompt da #19 precisa cobrir isso.
 - **Cache:** `pesquisa/data/processed/padronizado_<versao>.jsonl` (fora do Git), uma linha por `id`
   com as afirmações, a versão, o hash do prompt e o modelo. Trocar o modelo também refaz as
   linhas. A versão vem do nome do arquivo. Rodar
