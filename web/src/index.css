@@ -1161,11 +1161,68 @@ body:has(.screen-login) {
 
 .fako-logo-text {
   font-family: var(--font-display);
-  font-size: 2.1rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  color: #ffffff;
+  font-size: 1.45rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  color: #112a17;
   line-height: 1;
+}
+
+:root[data-theme="dark"] .fako-logo-text {
+  color: #ffffff;
+}
+
+.fako-brand-panel .fako-logo-text {
+  color: #ffffff;
+}
+
+/* Tamanhos do FakoLogo */
+.fako-logo-wrapper.size-small {
+  gap: 8px;
+}
+.fako-logo-wrapper.size-small .logo-seg {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.fako-logo-wrapper.size-small .logo-apple-dot {
+  width: 7.5px;
+  height: 7.5px;
+}
+.fako-logo-wrapper.size-small .fako-logo-text {
+  font-size: 1.15rem;
+}
+
+.fako-logo-wrapper.size-medium {
+  gap: 10px;
+}
+.fako-logo-wrapper.size-medium .logo-seg {
+  width: 10.5px;
+  height: 10.5px;
+  border-radius: 3px;
+}
+.fako-logo-wrapper.size-medium .logo-apple-dot {
+  width: 9.5px;
+  height: 9.5px;
+}
+.fako-logo-wrapper.size-medium .fako-logo-text {
+  font-size: 1.45rem;
+}
+
+.fako-logo-wrapper.size-large {
+  gap: 12px;
+}
+.fako-logo-wrapper.size-large .logo-seg {
+  width: 11.5px;
+  height: 11.5px;
+  border-radius: 3.5px;
+}
+.fako-logo-wrapper.size-large .logo-apple-dot {
+  width: 10.5px;
+  height: 10.5px;
+}
+.fako-logo-wrapper.size-large .fako-logo-text {
+  font-size: 2.1rem;
 }
 
 /* Headline Principal: Jogue. Analise. Aprenda. */

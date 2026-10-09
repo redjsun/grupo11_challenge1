@@ -52,7 +52,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <header className="figma-home-topbar">
         {/* Logo FAKO Oficial (3 segmentos + maçã + FAKO) */}
         <div className="figma-nav-left">
-          <FakoLogo size="medium" />
+          <FakoLogo size="medium" textColor={theme === "dark" ? "#ffffff" : "#112a17"} />
         </div>
 
         {/* Links Centrais em Pílula */}
