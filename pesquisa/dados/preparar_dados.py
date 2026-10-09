@@ -359,11 +359,21 @@ def dominio(url: str) -> str | None:
 
 
 def ler_fakebr():
-    base = RAW / "Fake.br-Corpus" / "full_texts"
+    """Textos de size_normalized_texts/, a versão que o corpus recomenda para treino: em cada
+    par, o texto mais longo é cortado no tamanho do mais curto, o que tira o atalho de
+    tamanho. Os metadados só existem em full_texts/ e as métricas descrevem o texto completo.
+
+    A numeração das duas versões é a mesma, salvo dois pares: 586 e 1607 só existem em
+    full_texts/ e 697 e 1468 só em size_normalized_texts/, sem metadados. Ficam de fora.
+    """
+    base = RAW / "Fake.br-Corpus" / "size_normalized_texts"
+    pasta_meta = RAW / "Fake.br-Corpus" / "full_texts"
     for rotulo in ("fake", "true"):
         pasta = base / rotulo
         for arq in sorted(pasta.glob("*.txt"), key=lambda p: int(p.stem)):
-            meta = (base / f"{rotulo}-meta-information" / f"{arq.stem}-meta.txt")
+            meta = pasta_meta / f"{rotulo}-meta-information" / f"{arq.stem}-meta.txt"
+            if not meta.exists():
+                continue
             linhas = meta.read_text(encoding="utf-8-sig").split("\n")
             autor, url, categoria, data_bruta = (linha.strip() for linha in linhas[:4])
             metricas = {

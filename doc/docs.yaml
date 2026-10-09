@@ -26,3 +26,7 @@ docs:
     titulo: Dataset de verdadeiros confiáveis
     arquivo: doc/dataset-verdadeiras.md
     descricao: Critérios de verdadeiro confiável (issue #6), filtros das matérias de portal, auditoria manual com medição do ruído e origem portal_verificado.
+  - id: banco-perguntas
+    titulo: Banco de perguntas do jogo
+    arquivo: doc/banco-perguntas.md
+    descricao: A afirmação do jogo é o texto do treino (≤ 25 palavras), contexto na revelação, notícias de API externa rotuladas pelo classificador e checagens, revisão humana.

@@ -29,7 +29,8 @@ não é mais baixado; ele continua no histórico do Git. A EDA da base atual est
 ## Atalhos que um classificador aprenderia
 
 1. **Tamanho.** A verdadeira é mais longa que a falsa em 98% dos pares (mediana de 918
-   × 157 palavras). O próprio corpus oferece `size_normalized_texts/` para contornar isso.
+   × 157 palavras). O próprio corpus oferece `size_normalized_texts/` para contornar isso,
+   e é a versão que `preparar_dados.py` lê.
 2. **Fonte.** 93% das falsas vêm de diariodobrasil.org; as verdadeiras, de G1 (64%) e
    Estadão (33%). Só as verdadeiras têm autor (98% × 2%). "G1", horários ("14h") e
    URLs no texto (3,2% × 0,1%) vazam a fonte.

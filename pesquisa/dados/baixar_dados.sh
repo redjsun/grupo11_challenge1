@@ -17,11 +17,15 @@ FAKERECOGNA_COMMIT="143842ba71e824a028572a89c9a522cbca40726e"
 FAKERECOGNA_URL="https://huggingface.co/datasets/recogna-nlp/FakeRecogna/resolve/$FAKERECOGNA_COMMIT/FakeRecogna.csv"
 FAKERECOGNA_SHA256="282110d0390a6dff37fedf43a22b3e61b97e30381bf96dacaa668ed45d3c4407"
 
-if [ -d "$RAW/Fake.br-Corpus/full_texts" ]; then
+# Só a versão recomendada para treino (size_normalized_texts: em cada par, o texto mais
+# longo é cortado no tamanho do mais curto) e os metadados, que só existem em full_texts/.
+if [ -d "$RAW/Fake.br-Corpus/size_normalized_texts" ]; then
   echo "Fake.br-Corpus já existe em pesquisa/data/raw/, pulando."
 else
-  echo "Baixando Fake.br-Corpus..."
-  git clone --quiet "$FAKEBR_REPO" "$RAW/Fake.br-Corpus"
+  echo "Baixando Fake.br-Corpus (size_normalized_texts e metadados)..."
+  git clone --quiet --filter=blob:none --no-checkout "$FAKEBR_REPO" "$RAW/Fake.br-Corpus"
+  git -C "$RAW/Fake.br-Corpus" sparse-checkout set --no-cone \
+    "/size_normalized_texts/" "/full_texts/*-meta-information/" "/README.md"
   git -C "$RAW/Fake.br-Corpus" checkout --quiet "$FAKEBR_COMMIT"
 fi
 

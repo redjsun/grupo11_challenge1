@@ -3,12 +3,15 @@
 Uso:
     python pesquisa/ml/padronizar.py --prompt api/app/prompts/extrair_afirmacoes_v1.txt
     python pesquisa/ml/padronizar.py --prompt ... --limite 50     # amostra, para medir tempo e custo
+    python pesquisa/ml/padronizar.py --prompt ... --splits todos  # inclui reserva e fora
 
 Em uso, o classificador recebe afirmações extraídas pela LLM; no treino, recebia o
 `texto_curto` original (manchete nos verdadeiros, alegação de checador nos falsos). Este
-script passa todos os registros de pesquisa/data/processed/dataset.jsonl, de todos os splits, pelo
-mesmo prompt do uso. Quem não tem `texto_curto` (Fake.br, verdadeiras do FakeTrue.Br, a
-maior parte das mensagens) é extraído do `texto`.
+script passa os registros de pesquisa/data/processed/dataset.jsonl pelo mesmo prompt do uso:
+por padrão, todos os de treino, validacao e teste do protocolo B (`split_produto`), com ou
+sem `texto_curto`; `reserva` e `fora` não entram no modelo do jogo e ficam de fora. Quem não
+tem `texto_curto` (Fake.br, verdadeiras do FakeTrue.Br, a maior parte das mensagens) é
+extraído do `texto`.
 
 Cache: pesquisa/data/processed/padronizado_<versao>.jsonl, uma linha por registro, com o `id`, as
 afirmações extraídas, o hash do prompt e o modelo. A versão vem do nome do arquivo do
@@ -23,7 +26,7 @@ Várias afirmações ou nenhuma (decisão registrada em doc/padronizacao.md): `a
 primeira como `texto_padronizado` e marca `n_afirmacoes`. Com zero (opinião),
 `texto_padronizado` fica vazio e o registro sai do treino de frases curtas.
 
-LLM: o Qwen hospedado, por qualquer endpoint compatível com a API de chat da OpenAI,
+LLM: o Qwen pelo Ollama (ou qualquer endpoint compatível com a API de chat da OpenAI),
 configurado por LLM_BASE_URL, LLM_MODEL (com a versão fixa) e LLM_API_KEY. O pedido leva o
 JSON Schema da #19 em `response_format` (--sem-esquema se o provedor não aceitar), a
 temperatura 0 e o texto truncado em --max-caracteres. LLM_EXTRA_BODY (JSON) entra no corpo
@@ -62,6 +65,9 @@ DATASET = PROCESSED / "dataset.jsonl"
 
 # O prompt recebe o texto neste marcador; sem ele, o texto vai depois do prompt.
 MARCADOR_TEXTO = "{texto}"
+
+# Splits do protocolo B que entram no modelo do jogo; `reserva` e `fora` não entram.
+SPLITS_PADRAO = ("treino", "validacao", "teste")
 
 # Cerca de 4 mil tokens em português: controla custo e tempo das matérias longas.
 MAX_CARACTERES = 16_000
@@ -137,6 +143,17 @@ def texto_de_entrada(registro: dict) -> str | None:
         if valor:
             return valor
     return None
+
+
+def filtrar_splits(registros: Iterable[dict], splits: Iterable[str] | None) -> Iterable[dict]:
+    """Só os registros cujo `split_produto` está em `splits`; None deixa passar todos."""
+    if splits is None:
+        yield from registros
+        return
+    splits = set(splits)
+    for registro in registros:
+        if registro.get("split_produto") in splits:
+            yield registro
 
 
 def ler_cache(caminho: Path, prompt: Prompt, modelo: str) -> dict[str, dict]:
@@ -219,7 +236,7 @@ def extrator_openai(
     extra: dict | None = None,
     dormir: Callable[[float], None] = time.sleep,
 ) -> Extrator:
-    """Endpoint /chat/completions compatível com a OpenAI (o Qwen hospedado, ou um local)."""
+    """Endpoint /chat/completions compatível com a OpenAI (o Qwen pelo Ollama, ou outro)."""
     url = base_url.rstrip("/") + "/chat/completions"
     cabecalhos = {"Content-Type": "application/json"}
     if chave:
@@ -417,6 +434,11 @@ def main():
     parser.add_argument("--max-caracteres", type=int, default=MAX_CARACTERES)
     parser.add_argument("--base", nargs="+", help="só estas bases (ex.: fakebr)")
     parser.add_argument(
+        "--splits",
+        default=",".join(SPLITS_PADRAO),
+        help="splits do split_produto, separados por vírgula, ou 'todos'",
+    )
+    parser.add_argument(
         "--exportar", action="store_true", help="CSV de conferência do que já está no cache"
     )
     args = parser.parse_args()
@@ -424,6 +446,7 @@ def main():
     if not args.dataset.exists():
         sys.exit(f"{args.dataset} não encontrado. Rode antes: make dados")
     prompt = carregar_prompt(args.prompt)
+    splits = None if args.splits == "todos" else [s.strip() for s in args.splits.split(",")]
     if args.provedor == "fake":
         extrator, modelo = extrator_fake, "fake"
     else:
@@ -441,7 +464,7 @@ def main():
         )
 
     def registros():
-        for registro in ler_dataset(args.dataset):
+        for registro in filtrar_splits(ler_dataset(args.dataset), splits):
             if not args.base or registro.get("base") in args.base:
                 yield registro
 
@@ -460,6 +483,7 @@ def main():
         paralelo=args.paralelo,
         limite=args.limite,
     )
+    print(f"splits: {args.splits}")
     print(relatorio.resumo())
     print(f"Cache em {cache_path.relative_to(RAIZ)}")
     # Tempo e tokens de cada rodada, para registrar o custo do lote (critério da #20).

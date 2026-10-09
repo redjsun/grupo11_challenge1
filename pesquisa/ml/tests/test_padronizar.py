@@ -14,6 +14,7 @@ from padronizar import (
     carregar_prompt,
     exportar,
     extrator_openai,
+    filtrar_splits,
     interpretar_resposta,
     ler_cache,
     padronizar,
@@ -72,6 +73,14 @@ def test_texto_de_entrada_prefere_o_curto_e_cai_no_longo():
     assert texto_de_entrada(REGISTROS[0]) == "Vacina causa autismo"
     assert texto_de_entrada(REGISTROS[1]) == "Matéria longa sem título curto."
     assert texto_de_entrada(REGISTROS[2]) is None
+
+
+def test_filtrar_splits_deixa_de_fora_reserva_e_fora():
+    splits = ("treino", "validacao", "teste", "reserva", "fora")
+    registros = [{"id": s, "split_produto": s} for s in splits]
+    filtrados = filtrar_splits(registros, ["treino", "validacao", "teste"])
+    assert [r["id"] for r in filtrados] == ["treino", "validacao", "teste"]
+    assert len(list(filtrar_splits(registros, None))) == 5
 
 
 UM = {"texto": "um", "quem_disse": None}
