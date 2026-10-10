@@ -2,20 +2,17 @@
 
 Entrega de documentação e validação do modelo (desafio 1, grupo 11). Cobre a preparação dos
 dados e o treino, o critério de escolha da abordagem, as métricas e a análise dos
-resultados, os desafios e os aprendizados. O código para carregar, executar e avaliar os
-modelos está em `pesquisa/notebooks/avaliacao_modelos.ipynb`.
+resultados, os desafios e os aprendizados. O código para carregar, executar e avaliar o
+modelo está em `pesquisa/notebooks/avaliacao_modelos.ipynb`.
 
 ## Resumo
 
 - **Tarefa:** dada uma afirmação curta em português, dizer se ela é `falso`, `enganoso` ou
   `verdadeiro`, tratados como **escala ordinal**, com uma nota de 0 a 100 e a confiança.
   O resultado alimenta o jogo FAKO (o jogador avalia afirmações) e o painel do admin.
-- **Modelos comparados:** (1) referência TF-IDF + regressão logística ordinal e
-  (2) BERTimbau com cabeça ordinal CORAL. Os dois produzem as mesmas duas fronteiras e
-  são avaliados pelo mesmo script.
-- **Modelo escolhido:** a **referência TF-IDF ordinal**, o único dos dois com
-  treino completo nesta entrega. O BERTimbau está implementado e testado, mas o treino em
-  CPU não terminou a tempo (seção 2.3).
+- **Modelo:** TF-IDF de palavras e de caracteres + regressão logística **ordinal**
+  (método de Frank e Hall), com o hiperparâmetro `C` escolhido na validação. Arquivo:
+  `models/2026-11/referencia/referencia.joblib`.
 - **Resultado no teste (checagens de 2025 em diante, nunca vistas):** F1 macro **0,411** (validação 0,426), AUC macro
   0,630 e MAE da nota 25 pontos. O resultado mais importante é negativo: **no teste, o
   modelo fica abaixo do teste de atalho** (AUC macro 0,630 × 0,664). Ou seja, ainda não
@@ -100,7 +97,7 @@ enquanto no treino os verdadeiros são manchetes e os falsos são alegações de
 `pesquisa/ml/padronizar.py` passa o treino pelo mesmo prompt (`extrair_afirmacoes_v1.txt`)
 com o **Qwen3 8B pelo Ollama**, local, com cache por `id` e versão do prompt
 (`doc/padronizacao.md`). A configuração está pronta (`.env`: `LLM_MODEL=qwen3:8b`), mas a
-rodada completa em CPU leva horas; os modelos desta entrega usam o texto original, e a
+rodada completa em CPU leva horas; o modelo desta entrega usa o texto original, e a
 comparação original × padronizado fica como próximo passo (`configs/referencia-padronizado.toml`).
 
 ## 2. Treino e critério de escolha da abordagem
@@ -108,49 +105,49 @@ comparação original × padronizado fica como próximo passo (`configs/referenc
 ### 2.1 Por que ordinal
 
 Nem toda notícia é inteiramente verdadeira ou falsa, e o erro "falso → verdadeiro" é muito
-pior que "falso → enganoso". Os dois modelos aprendem **duas fronteiras**:
-P1 = P(veracidade > falso) e P2 = P(veracidade > enganoso). Daí saem
+pior que "falso → enganoso". Em vez de três classes soltas, o modelo aprende **duas
+fronteiras**: P1 = P(veracidade > falso) e P2 = P(veracidade > enganoso). Daí saem
 P(falso) = 1 − P1, P(enganoso) = P1 − P2, P(verdadeiro) = P2 e a nota = 100 × (P1 + P2) / 2.
 Com poucos enganosos, os milhares de falsos e verdadeiros também ensinam onde fica o meio.
 
-### 2.2 Modelo 1: referência TF-IDF ordinal
+### 2.2 O modelo: TF-IDF + regressão logística ordinal
 
-`pesquisa/ml/treinar_referencia.py`, `configs/referencia.toml`.
+`pesquisa/ml/treinar_referencia.py`, configuração `pesquisa/ml/configs/referencia.toml`.
 
-- TF-IDF de palavras (1–2-gramas) + n-gramas de caracteres (3–5), ajustado só no treino;
-- duas regressões logísticas (método de Frank e Hall), `class_weight="balanced"` e peso por
-  origem do rótulo;
-- `C` escolhido numa grade (0,25 a 16) pelo F1 macro na validação: **C = 4**.
+1. **Representação:** TF-IDF de palavras (unigramas e bigramas) somado ao TF-IDF de
+   n-gramas de caracteres (3 a 5, dentro das palavras), com `min_df = 3`, `max_df = 0,9` e
+   TF sublinear. Os n-gramas de caracteres pegam variações de grafia e flexões do português.
+   O vocabulário é ajustado **só no treino** (94.598 variáveis).
+2. **Fronteiras:** duas regressões logísticas sobre a mesma matriz, uma para cada fronteira
+   (método de Frank e Hall). P2 é cortada em P1 para as probabilidades nunca ficarem negativas.
+3. **Desbalanceamento:** `class_weight="balanced"` em cada fronteira, multiplicado pelo
+   peso por origem do rótulo de `dados.py` (rótulo de agência e da equipe valem mais que o
+   de base pública).
+4. **Hiperparâmetro:** a regularização `C` é escolhida numa grade (0,25; 0,5; 1; 2; 4; 8; 16)
+   pelo F1 macro das três classes na validação. Venceu **C = 4**.
+5. **Saídas:** `referencia.joblib` (só objetos do scikit-learn: vetorizador e as duas
+   fronteiras, para a API carregar sem o código da pesquisa), `previsoes.jsonl` e
+   `config.json`, com o hash do dataset e da configuração para reproduzir o resultado.
 
-Serve de piso: é rápido (65 s de treino, ~2 ms por frase), explicável (as palavras que mais
-pesaram numa frase, para o admin) e mostra quanto um modelo de conteúdo supera o atalho.
+Treino em 65 s numa CPU comum, com 10.218 exemplos; inferência de ~2 ms por frase.
 
-### 2.3 Modelo 2: BERTimbau com cabeça CORAL
+### 2.3 Critérios de seleção da abordagem
 
-`pesquisa/ml/treinar_bert.py`, `configs/bert.toml`.
-
-- codificador `neuralmind/bert-base-portuguese-cased` (BERT treinado em português
-  brasileiro), ajustado por inteiro;
-- cabeça **CORAL**: o [CLS] passa por uma única camada linear, e cada fronteira tem só o seu
-  viés. Como as fronteiras dividem os pesos, a ordem das classes é garantida;
-- perda: entropia cruzada binária nas duas fronteiras, com peso da classe ("balanced") ×
-  peso da origem do rótulo; AdamW, taxa 3e-5, aquecimento de 10%, lote 32, até 96 tokens;
-- **parada antecipada** pelo F1 macro na validação; fica a melhor época.
-
-**Situação nesta entrega:** o script está pronto, com testes
-(`pesquisa/ml/tests/test_treinar_bert.py`, que confere a ordem das fronteiras e o peso das
-classes) e alvo `make bert`. A configuração prevê 3 sementes. Sem GPU, rodamos uma
-semente (42) com até 3 épocas no container `ml` (PyTorch CPU), mas depois de quase uma hora
-a primeira época ainda não tinha terminado, com a máquina sem memória livre. O treino foi
-pausado e o BERTimbau fica como candidato a avaliar com o mesmo notebook, que já o carrega
-se `models/2026-11/bert/` existir.
-
-### 2.4 Critério de escolha
-
-Definido antes de olhar o teste: **maior F1 macro na validação**, com **margem positiva
-sobre o teste de atalho** (AUC macro). F1 macro porque as classes são desbalanceadas e a
-classe `verdadeiro` é rara nas checagens recentes; a margem garante que o modelo aprendeu
-conteúdo, não só a forma do texto. Latência e explicabilidade desempatam.
+- **Piso honesto antes de modelos maiores.** Com o atalho de forma tão forte nos dados
+  (seção 1.3), era preciso primeiro um modelo simples e reproduzível para saber quanto o
+  *conteúdo* acrescenta. Sem ele, não dá para dizer se um modelo maior ganhou por entender
+  o texto ou por reconhecer melhor a fonte.
+- **Viável na infraestrutura que temos.** Treina em um minuto em CPU, sem GPU, e cabe na
+  API (2 MB compactado, milissegundos por frase). O ajuste fino do BERTimbau em CPU não
+  terminou nem uma época em uma hora nesta máquina.
+- **Explicável.** Num modelo linear, a contribuição de cada palavra é exata
+  (`contribuicoes()` em `treinar_referencia.py`), o que permite ao admin auditar por que uma
+  afirmação recebeu a nota, coisa importante num jogo educativo.
+- **Ordinal em vez de binário ou multiclasse**, pela natureza do problema (seção 2.1).
+- **Escolhas só na validação.** `C` e configuração foram decididos pelo F1 macro da
+  validação (2024). F1 macro porque as classes são desbalanceadas e `verdadeiro` é rara;
+  o teste (2025+) foi olhado uma única vez, no notebook. O critério de aceite para uso no
+  produto é ter **margem positiva sobre o teste de atalho**.
 
 ## 3. Métricas e análise dos resultados
 
@@ -218,9 +215,9 @@ Escolha do `C` na validação (F1 macro): 0,25 → 0,300; 0,5 → 0,346; 1 → 0
 
 **Conclusão:** a referência cumpre o papel de piso reprodutível e de pipeline de ponta a
 ponta (dados → treino → previsões → avaliação comum), mas **não está pronta para dar
-veredito ao jogador**. No produto, ela deve entrar com limiar alto de `incerto` e passar
-pela revisão do admin. Para melhorar de verdade, o próximo passo é o texto padronizado e o
-BERTimbau, medidos contra o mesmo atalho.
+veredito ao jogador**: não passa no critério de aceite (margem sobre o atalho). No produto,
+deve entrar com limiar alto de `incerto` e passar pela revisão do admin. Para melhorar de
+verdade, os próximos passos (seção 6) atacam a causa, os dados, antes da arquitetura.
 
 ## 4. Principais desafios
 
@@ -239,9 +236,9 @@ BERTimbau, medidos contra o mesmo atalho.
 - **Bases muito diferentes entre si.** Fake.br (textos longos, 2016–2018), FakeRecogna,
   checagens: foi preciso um esquema único, normalização de veredito e de datas (19 formatos
   no Fake.br) e deduplicação.
-- **Infraestrutura.** Sem GPU, o BERTimbau treina em CPU (container `ml`), o que limitou o
-  número de sementes e de épocas; a padronização pela LLM (Qwen3 8B local) também é lenta em
-  CPU. Duas linhas de código paralelas (`ml/` e `pesquisa/ml/`) precisaram ser integradas.
+- **Infraestrutura.** Sem GPU, modelos de linguagem maiores (ajuste fino do BERTimbau) e a
+  padronização pela LLM (Qwen3 8B local) ficaram lentos demais para esta entrega. Duas
+  linhas de código paralelas (`ml/` e `pesquisa/ml/`) também precisaram ser integradas.
 
 ## 5. Aprendizados
 
@@ -253,7 +250,7 @@ BERTimbau, medidos contra o mesmo atalho.
 - **Dividir por tempo dá números honestos.** A divisão aleatória misturaria as mesmas
   checagens e assuntos entre treino e teste.
 - **Uma porta única para os dados e um avaliador comum** (`dados.py`, `avaliar.py`,
-  configurações TOML com hash do dataset) permitiram comparar modelos de forma justa e
+  configurações TOML com hash do dataset) permitem comparar modelos futuros de forma justa e
   reproduzir cada resultado.
 - **Ordinal em vez de binário** reflete melhor o problema (meias-verdades) e dá ao jogo uma
   nota, não só um rótulo.
@@ -263,8 +260,10 @@ BERTimbau, medidos contra o mesmo atalho.
 ## 6. Próximos passos
 
 - Treinar e avaliar no texto padronizado pelo Qwen3 (mesmo formato no treino e no uso).
-- Mais sementes e taxas de aprendizado do BERTimbau, em GPU; calibração por temperature
-  scaling na validação.
+- Ajuste fino do BERTimbau (`neuralmind/bert-base-portuguese-cased`) com cabeça ordinal
+  CORAL, já implementado em `pesquisa/ml/treinar_bert.py`, treinado em GPU e comparado com
+  esta referência pelo mesmo notebook e pelo mesmo atalho.
+- Calibração (Platt) na validação, para a confiança refletir o acerto.
 - Limiares de `incerto` para admin e jogador (`limiares.json`).
 - Ampliar os verdadeiros checados (anotação da equipe, outras agências).
 
@@ -273,9 +272,9 @@ BERTimbau, medidos contra o mesmo atalho.
 | Artefato | Onde |
 |---|---|
 | Notebook de carregamento, execução e avaliação | `pesquisa/notebooks/avaliacao_modelos.ipynb` |
-| Modelo referência | `models/2026-11/referencia/referencia.joblib` (+ `config.json`, `metricas.json`) |
-| Modelo BERTimbau | `models/2026-11/bert/` (`codificador/`, `cabeca_coral.pt`, `config.json`), quando o treino terminar |
-| Treino | `pesquisa/ml/treinar_referencia.py`, `pesquisa/ml/treinar_bert.py`, `pesquisa/ml/configs/` |
+| Modelo treinado | `models/2026-11/referencia/referencia.joblib` (+ `config.json`, `previsoes.jsonl`) |
+| Métricas | `models/2026-11/referencia/metricas.json`, `relatorio.md`, `confiabilidade.png` |
+| Treino | `pesquisa/ml/treinar_referencia.py`, `pesquisa/ml/configs/referencia.toml` |
 | Avaliação | `pesquisa/ml/avaliar.py` (relatório por modelo em `relatorio.md`) |
 
-Os modelos ficam fora do Git (`models/` no `.gitignore`) e são entregues à parte.
+O modelo fica fora do Git (`models/` no `.gitignore`) e é entregue à parte.
